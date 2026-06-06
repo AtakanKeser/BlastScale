@@ -6,7 +6,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -37,15 +39,21 @@ public class OutboxPublisherJob {
     private final GameplayMetrics metrics;
     private final DistributedLock lock;
     private final Clock clock;
+    private final TransactionTemplate transaction;
 
     public OutboxPublisherJob(OutboxEventRepository outbox, TelemetryPublisher publisher, OutboxProperties properties,
-                              GameplayMetrics metrics, DistributedLock lock, Clock clock) {
+                              GameplayMetrics metrics, DistributedLock lock, Clock clock,
+                              PlatformTransactionManager transactionManager) {
         this.outbox = outbox;
         this.publisher = publisher;
         this.properties = properties;
         this.metrics = metrics;
         this.lock = lock;
         this.clock = clock;
+        // Programmatic transactions: a @Transactional method called from tick() on the same bean
+        // would bypass the Spring proxy (self-invocation) and silently run without a transaction,
+        // which means the SKIP LOCKED claim and the "published" flag would never be flushed.
+        this.transaction = new TransactionTemplate(transactionManager);
     }
 
     @Scheduled(fixedDelayString = "${blastscale.outbox.poll-interval}", initialDelayString = "5s")
@@ -63,24 +71,26 @@ public class OutboxPublisherJob {
     }
 
     /** @return number of events published in this batch */
-    @Transactional
     public int publishBatch() {
-        List<OutboxEvent> batch = outbox.lockNextBatch(properties.batchSize(), properties.maxAttempts());
-        if (batch.isEmpty()) {
-            return 0;
-        }
-        try {
-            publisher.publish(batch);
-            Instant now = Instant.now(clock);
-            batch.forEach(event -> event.markPublished(now));
-            metrics.outboxPublished(batch.size());
-            return batch.size();
-        } catch (RuntimeException e) {
-            log.warn("Publishing {} outbox events failed (will retry): {}", batch.size(), e.getMessage());
-            batch.forEach(event -> event.markFailed(e.getMessage()));
-            metrics.outboxFailed(batch.size());
-            return 0;
-        }
+        Integer published = transaction.execute(status -> {
+            List<OutboxEvent> batch = outbox.lockNextBatch(properties.batchSize(), properties.maxAttempts());
+            if (batch.isEmpty()) {
+                return 0;
+            }
+            try {
+                publisher.publish(batch);
+                Instant now = Instant.now(clock);
+                batch.forEach(event -> event.markPublished(now));
+                metrics.outboxPublished(batch.size());
+                return batch.size();
+            } catch (RuntimeException e) {
+                log.warn("Publishing {} outbox events failed (will retry): {}", batch.size(), e.getMessage());
+                batch.forEach(event -> event.markFailed(e.getMessage()));
+                metrics.outboxFailed(batch.size());
+                return 0;
+            }
+        });
+        return published == null ? 0 : published;
     }
 
     /** Daily housekeeping: published rows older than a week are no longer needed in MySQL. */
