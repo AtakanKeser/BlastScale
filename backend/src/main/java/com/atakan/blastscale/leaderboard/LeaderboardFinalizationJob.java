@@ -3,6 +3,7 @@ package com.atakan.blastscale.leaderboard;
 import com.atakan.blastscale.common.redis.DistributedLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -15,6 +16,7 @@ import java.time.Instant;
  * Redis lock ensures only one of them does the work; the others simply find nothing to do.
  */
 @Component
+@ConditionalOnProperty(prefix = "blastscale.jobs", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class LeaderboardFinalizationJob {
 
     private static final Logger log = LoggerFactory.getLogger(LeaderboardFinalizationJob.class);

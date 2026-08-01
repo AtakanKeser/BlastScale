@@ -3,6 +3,7 @@ package com.atakan.blastscale.event;
 import com.atakan.blastscale.common.redis.DistributedLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -10,6 +11,7 @@ import java.time.Duration;
 
 /** Drives event lifecycles by time. One replica does the work per tick thanks to the Redis lock. */
 @Component
+@ConditionalOnProperty(prefix = "blastscale.jobs", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class LiveEventScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(LiveEventScheduler.class);

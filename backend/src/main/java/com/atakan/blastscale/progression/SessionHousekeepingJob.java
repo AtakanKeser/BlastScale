@@ -3,6 +3,7 @@ package com.atakan.blastscale.progression;
 import com.atakan.blastscale.common.redis.DistributedLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -10,6 +11,7 @@ import java.time.Duration;
 
 /** Marks sessions abandoned mid-level (app killed, phone died) as EXPIRED so tables stay tidy. */
 @Component
+@ConditionalOnProperty(prefix = "blastscale.jobs", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SessionHousekeepingJob {
 
     private static final Logger log = LoggerFactory.getLogger(SessionHousekeepingJob.class);
