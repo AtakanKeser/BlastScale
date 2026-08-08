@@ -27,12 +27,16 @@ spring:
     locations: classpath:db/migration
 
   # ----- Redis: cache / leaderboard / rate limit / idempotency / locks -----
-  # (Spring Boot 4 moved the client settings from spring.data.redis.* to spring.redis.*)
-  redis:
-    host: localhost
-    port: 6379
-    timeout: 2s
-    connect-timeout: 2s
+  # (canonical prefix in Spring Boot 4 is still spring.data.redis.*; spring.redis.* is the
+  # deprecated 2.x name — unlike MongoDB, which moved to spring.mongodb.*)
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 2s
+      connect-timeout: 2s
+      repositories:
+        enabled: false             # RedisTemplate only; no Redis repositories, less startup noise
 
   # ----- MongoDB: level & event configuration documents -----
   # Short timeouts: when MongoDB is down we want to fall back to procedural levels within
@@ -103,7 +107,8 @@ blastscale:
     password: ${BLASTSCALE_ADMIN_PASSWORD:admin12345}
   rate-limit:
     enabled: true
-    requests-per-minute: 600             # per player (or per IP for anonymous calls)
+    requests-per-minute: 600             # per authenticated player
+    anonymous-requests-per-minute: 3000  # per IP on /auth/**; carriers NAT thousands of players behind one IP
   cache:
     player-profile-ttl: 10m
     remote-config-ttl: 60s
