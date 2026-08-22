@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -87,9 +88,12 @@ public class GlobalExceptionHandler {
      * Two requests raced on the same row (e.g. the same wallet). The losing request gets a 409
      * and can retry; nothing was partially applied because the transaction rolled back.
      */
-    @ExceptionHandler(OptimisticLockingFailureException.class)
-    public ResponseEntity<ApiError> handleOptimisticLock(OptimisticLockingFailureException ex, HttpServletRequest request) {
-        log.warn("Optimistic lock failure on {}: {}", request.getRequestURI(), rootMessage(ex));
+    @ExceptionHandler({OptimisticLockingFailureException.class, PessimisticLockingFailureException.class})
+    public ResponseEntity<ApiError> handleLockConflict(Exception ex, HttpServletRequest request) {
+        // Covers @Version conflicts as well as InnoDB deadlocks / lock wait timeouts
+        // (CannotAcquireLockException, DeadlockLoserDataAccessException): the transaction was rolled
+        // back cleanly, so a retry is safe and the client is told so with a 409, never a 500.
+        log.warn("Lock conflict on {}: {}", request.getRequestURI(), rootMessage(ex));
         return build(ErrorCode.CONCURRENT_MODIFICATION, "The resource was modified concurrently, please retry", Map.of(), request);
     }
 
