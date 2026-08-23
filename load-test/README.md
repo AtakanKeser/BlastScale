@@ -37,16 +37,16 @@ balancer real clients use.
 docker compose up --build -d
 
 # validate the deployment: one player, three levels, every call must succeed
-docker compose --profile loadtest run --rm k6 run /scripts/smoke.js
+docker compose --profile loadtest run --rm --no-deps k6 run /scripts/smoke.js
 
 # realistic load: 100 players for 2 minutes
-docker compose --profile loadtest run --rm k6 run -e VUS=100 -e DURATION=2m /scripts/scenario.js
+docker compose --profile loadtest run --rm --no-deps k6 run -e VUS=100 -e DURATION=2m /scripts/scenario.js
 
 # ramp 100 -> 500 -> 1000 players (about 11 minutes)
-docker compose --profile loadtest run --rm k6 run -e RAMP=1 /scripts/scenario.js
+docker compose --profile loadtest run --rm --no-deps k6 run -e RAMP=1 /scripts/scenario.js
 
 # find the breaking point (about 13 minutes, up to 2000 players) and keep the JSON summary
-docker compose --profile loadtest run --rm k6 run -e RESULTS_DIR=/results /scripts/stress.js
+docker compose --profile loadtest run --rm --no-deps k6 run -e RESULTS_DIR=/results /scripts/stress.js
 ```
 
 Every `-e NAME=value` after `run` is passed to k6 as `__ENV.NAME`. `RESULTS_DIR` is not preset:
