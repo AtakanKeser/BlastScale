@@ -484,10 +484,23 @@ Raw k6 summaries are written to `load-test/results/` by every run.
 
 ## Clients
 
-- **Unity client** (`unity-client/`): login, home (level, lives with countdown, coins, stars),
-  gameplay grid, result, shop, leaderboard and events screens, all talking to the real API. It runs
-  the C# port of the engine for rendering only; the server decides the outcome by replaying the
-  moves. See [unity-client/README.md](unity-client/README.md).
+<p align="center">
+  <img src="docs/screenshots/01-login.png" width="180" alt="Login screen">
+  <img src="docs/screenshots/02-home.png" width="180" alt="Home screen">
+  <img src="docs/screenshots/05-gameplay-pop.png" width="180" alt="Gameplay with a group popping">
+  <img src="docs/screenshots/07-result.png" width="180" alt="Level cleared screen">
+  <img src="docs/screenshots/10-leaderboard.png" width="180" alt="Weekly leaderboard">
+</p>
+
+
+- **Unity client** (`unity-client/`): a polished portrait mobile game — login, home (level, lives
+  with countdown, coins, stars, daily reward), animated gameplay grid (pop/fall/spawn tweens,
+  particles, combo banners, star reveals), result screen with confetti and reward breakdown, shop,
+  leaderboard and events, all talking to the real API; procedurally synthesized sound effects and
+  music, and an offline demo mode that plays the same engine without a server. The client runs the
+  C# port of the engine for rendering only; the server decides the outcome by replaying the moves.
+  Builds and installs on an iPhone with one script (see [Playing on an iPhone](#playing-on-an-iphone)).
+  See [unity-client/README.md](unity-client/README.md).
 - **Admin / LiveOps panel** (`admin-panel/`, React): dashboard (Prometheus + business counters),
   player investigation (profile, ledger, sessions, telemetry timeline, compensation grants), live
   events, experiments, remote configuration, leaderboard, levels, system health. See

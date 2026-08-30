@@ -23,7 +23,7 @@ namespace BlastScale.Client.Net
     ///         can fall back to the login screen when a token expires.</item>
     /// </list>
     /// </summary>
-    public sealed class ApiClient
+    public sealed class ApiClient : IApiClient
     {
         private const string IdempotencyKeyHeader = "Idempotency-Key";
         private const string IdempotentReplayedHeader = "Idempotent-Replayed";

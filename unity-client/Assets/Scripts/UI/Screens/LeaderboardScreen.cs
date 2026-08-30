@@ -2,6 +2,8 @@ using System.Collections;
 using BlastScale.Client.Core;
 using BlastScale.Client.Net;
 using BlastScale.Client.Net.Dto;
+using BlastScale.Client.UI.Fx;
+using BlastScale.Client.UI.Gfx;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -15,14 +17,16 @@ namespace BlastScale.Client.UI.Screens
         private Text _infoLabel;
         private Text _myRankLabel;
         private RectTransform _content;
+        private RectTransform _myRankCard;
 
         protected override void Build(RectTransform root)
         {
-            RectTransform column = CreateContentColumn(root, 16f, 40);
-            CreateHeader(column, "Weekly leaderboard", () => App.Flow.GoHome());
-            _infoLabel = UiFactory.CreateLabel(column, "Loading...", UiTheme.SmallSize, UiTheme.Muted, TextAnchor.MiddleLeft);
-            UiFactory.CreateScrollView(column, out _content);
-            _myRankLabel = UiFactory.CreateLabel(column, "", UiTheme.BodySize, UiTheme.Text, TextAnchor.MiddleCenter, FontStyle.Bold, 70f);
+            RectTransform column = CreateContentColumn(root, 14f, 36, 20, 28);
+            CreateHeader(column, "Leaderboard", () => App.Flow.GoHome());
+            _infoLabel = UiFactory.CreateLabel(column, "Loading...", UiTheme.SmallSize - 2, UiTheme.Muted, TextAnchor.MiddleLeft, UiFont.BodyBold, 36f);
+            UiFactory.CreateScrollView(column, out _content, 10f);
+            _myRankCard = UiFactory.CreateCard(column, "MyRank", UiTheme.CardRadius, 22, 10, TextAnchor.MiddleCenter, UiTheme.WithAlpha(UiTheme.Violet, 0.35f));
+            _myRankLabel = UiFactory.CreateLabel(_myRankCard, "", UiTheme.BodySize, UiTheme.Text, TextAnchor.MiddleCenter, UiFont.BodyBold);
         }
 
         protected override void OnShown()
@@ -51,33 +55,46 @@ namespace BlastScale.Client.UI.Screens
 
             if (view.players == null || view.players.Count == 0)
             {
-                UiFactory.CreateLabel(_content, "No scores yet this week. Clear a level to appear here!", UiTheme.BodySize, UiTheme.Muted, TextAnchor.MiddleCenter, FontStyle.Normal, 120f);
+                RectTransform empty = UiFactory.CreateCard(_content, "Empty", UiTheme.CardRadius, 30, 8, TextAnchor.MiddleCenter);
+                UiFactory.CreateIcon(empty, IconFactory.Trophy(), Color.white, 96f);
+                UiFactory.CreateLabel(empty, "No scores yet this week.\nClear a level to appear here!", UiTheme.BodySize - 2, UiTheme.TextSoft);
             }
             else
             {
+                int index = 0;
                 foreach (LeaderboardView.Entry entry in view.players)
                 {
                     bool me = entry.playerId == App.State.PlayerId;
-                    CreateRow("#" + entry.rank, entry.name, TimeFormat.Number(entry.score), me);
+                    RectTransform row = CreateRow(entry.rank, entry.name, TimeFormat.Number(entry.score), me);
+                    Tween.ScaleFrom(row, 0.9f, 0.3f, Ease.OutBack, 0.03f * index++);
                 }
             }
             _myRankLabel.text = view.myRank.HasValue
-                ? "Your rank: #" + view.myRank.Value + "  ·  score " + TimeFormat.Number(view.myScore)
+                ? "Your rank: #" + view.myRank.Value + "  ·  " + TimeFormat.Number(view.myScore) + " points"
                 : "You are not ranked yet";
+            Tween.ScaleFrom(_myRankCard, 0.9f, 0.35f, Ease.OutBack, 0.2f);
         }
 
-        /// <summary>A three-column row; the player's own row is highlighted.</summary>
-        private void CreateRow(string rank, string name, string score, bool highlight)
+        /// <summary>A rank medal, the name and the score; the top three get gold/silver/bronze medals.</summary>
+        private RectTransform CreateRow(int rank, string name, string score, bool highlight)
         {
-            Image panel = UiFactory.CreatePanel(_content, "Row " + rank, highlight ? UiTheme.Highlight : UiTheme.PanelLight);
-            UiFactory.SetLayout(panel.gameObject, preferredHeight: 80f, minHeight: 80f);
-            UiFactory.AddHorizontalLayout(panel.rectTransform, 12f, 16);
-            Text rankLabel = UiFactory.CreateLabel(panel.transform, rank, UiTheme.BodySize, UiTheme.Muted, TextAnchor.MiddleLeft, FontStyle.Bold);
-            UiFactory.SetLayout(rankLabel.gameObject, preferredWidth: 120f);
-            Text nameLabel = UiFactory.CreateLabel(panel.transform, name, UiTheme.BodySize, UiTheme.Text, TextAnchor.MiddleLeft);
+            RectTransform row = UiFactory.CreateCard(_content, "Row " + rank, 30f, 14, 16, TextAnchor.MiddleLeft,
+                highlight ? UiTheme.WithAlpha(UiTheme.Violet, 0.4f) : UiTheme.CardFill, true, false);
+            UiFactory.SetLayout(row.gameObject, preferredHeight: 92f, minHeight: 92f);
+
+            Color medal = rank == 1 ? UiTheme.Gold : rank == 2 ? UiTheme.Hex("#C9D1E4") : rank == 3 ? UiTheme.Hex("#D08A4E") : new Color(1f, 1f, 1f, 0.12f);
+            RectTransform badge = UiFactory.CreateRect(row, "Rank");
+            UiFactory.SetLayout(badge.gameObject, preferredWidth: 64f, preferredHeight: 64f, minWidth: 64f, flexibleWidth: 0f);
+            Image circle = UiFactory.CreateImage(badge, "Circle", SpriteFactory.Circle(64), medal);
+            UiFactory.Stretch(circle.rectTransform);
+            Text rankLabel = UiFactory.CreateLabel(badge, rank.ToString(), UiTheme.SmallSize, rank <= 3 ? UiTheme.Hex("#2A1B3D") : UiTheme.Text, TextAnchor.MiddleCenter, UiFont.Display);
+            UiFactory.Stretch(rankLabel.rectTransform);
+
+            Text nameLabel = UiFactory.CreateLabel(row, name, UiTheme.BodySize - 2, UiTheme.Text, TextAnchor.MiddleLeft, UiFont.BodyBold);
             UiFactory.SetLayout(nameLabel.gameObject, flexibleWidth: 1f);
-            Text scoreLabel = UiFactory.CreateLabel(panel.transform, score, UiTheme.BodySize, UiTheme.Warning, TextAnchor.MiddleRight, FontStyle.Bold);
-            UiFactory.SetLayout(scoreLabel.gameObject, preferredWidth: 260f);
+            Text scoreLabel = UiFactory.CreateLabel(row, score, UiTheme.BodySize - 2, UiTheme.Gold, TextAnchor.MiddleRight, UiFont.Display);
+            UiFactory.SetLayout(scoreLabel.gameObject, preferredWidth: 220f, flexibleWidth: 0f);
+            return row;
         }
     }
 }

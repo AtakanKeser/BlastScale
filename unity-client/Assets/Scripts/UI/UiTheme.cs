@@ -3,55 +3,110 @@ using UnityEngine;
 namespace BlastScale.Client.UI
 {
     /// <summary>
-    /// Colours and font sizes shared by every screen. Everything is drawn with plain tinted UGUI
-    /// images (no sprites), so the palette is the whole visual identity of the client.
+    /// The visual identity in one place: palette, font sizes, corner radii and the six block
+    /// colours. Every sprite is generated at runtime, so these values are the whole art direction
+    /// ("juicy casual" on a dark navy to purple gradient).
     /// </summary>
     public static class UiTheme
     {
-        public static readonly Color Background = Hex("#141826");
-        public static readonly Color Panel = Hex("#1F2437");
-        public static readonly Color PanelLight = Hex("#2A3049");
-        public static readonly Color Accent = Hex("#3D7BFF");
-        public static readonly Color Secondary = Hex("#3A4160");
-        public static readonly Color Success = Hex("#2EBD6B");
-        public static readonly Color Danger = Hex("#E5484D");
-        public static readonly Color Warning = Hex("#F5A524");
-        public static readonly Color Text = Hex("#F4F6FB");
-        public static readonly Color Muted = Hex("#9AA3BD");
-        public static readonly Color InputBackground = Hex("#0F1220");
-        public static readonly Color Highlight = Hex("#2F3B63");
+        // ----- background gradient -----
+        public static readonly Color BackgroundTop = Hex("#151B3B");
+        public static readonly Color BackgroundBottom = Hex("#3B1D62");
 
-        public const int TitleSize = 72;
-        public const int HeadingSize = 46;
+        // ----- surfaces -----
+        public static readonly Color CardFill = new Color(1f, 1f, 1f, 0.09f);
+        public static readonly Color CardFillStrong = new Color(1f, 1f, 1f, 0.16f);
+        public static readonly Color CardBorder = new Color(1f, 1f, 1f, 0.16f);
+        public static readonly Color ShadowColor = new Color(0f, 0f, 0f, 0.38f);
+        public static readonly Color InputFill = new Color(0f, 0f, 0f, 0.30f);
+        public static readonly Color BoardFill = new Color(0f, 0f, 0f, 0.28f);
+        public static readonly Color SlotFill = new Color(1f, 1f, 1f, 0.06f);
+        public static readonly Color Scrim = new Color(0.03f, 0.02f, 0.08f, 0.72f);
+
+        // ----- text -----
+        public static readonly Color Text = Hex("#FFFFFF");
+        public static readonly Color TextSoft = Hex("#D5D9F0");
+        public static readonly Color Muted = Hex("#9AA2C8");
+        public static readonly Color TextShadow = new Color(0f, 0f, 0f, 0.45f);
+
+        // ----- accents -----
+        public static readonly Color Primary = Hex("#2ED47A");   // green: play / confirm
+        public static readonly Color Blue = Hex("#3D8BFF");      // secondary primary
+        public static readonly Color Secondary = Hex("#525B8A"); // neutral grey-blue
+        public static readonly Color Danger = Hex("#FF5A5F");
+        public static readonly Color Gold = Hex("#FFC93C");
+        public static readonly Color Amber = Hex("#FFB000");
+        public static readonly Color Heart = Hex("#FF4F79");
+        public static readonly Color Sky = Hex("#38B6FF");
+        public static readonly Color Violet = Hex("#8F6BFF");
+        public static readonly Color Pink = Hex("#FF6BC6");
+        public static readonly Color Lime = Hex("#7ED957");
+        public static readonly Color StarOff = new Color(1f, 1f, 1f, 0.22f);
+
+        // ----- typography (reference units) -----
+        public const int TitleSize = 88;
+        public const int ScoreSize = 76;
+        public const int HeadingSize = 48;
         public const int BodySize = 34;
         public const int SmallSize = 28;
+        public const int TinySize = 24;
 
-        /// <summary>Block colours by colour index; levels use at most 6 colours, extra entries are a safety net.</summary>
+        // ----- metrics -----
+        public const float ButtonHeight = 130f;
+        public const float IconButtonSize = 112f;
+        public const float ButtonRadius = 34f;
+        public const float CardRadius = 40f;
+        public const float PillRadius = 42f;
+        public const float ShadowBlur = 14f;
+
+        /// <summary>The six block colours; <c>colorCount</c> of a level picks the first N.</summary>
         private static readonly Color[] BlockColors =
         {
-            Hex("#E5484D"), // 0 red
-            Hex("#3D7BFF"), // 1 blue
-            Hex("#2EBD6B"), // 2 green
-            Hex("#F5D90A"), // 3 yellow
-            Hex("#A855F7"), // 4 purple
-            Hex("#F97316"), // 5 orange
-            Hex("#22D3EE"), // 6 cyan
-            Hex("#EC4899")  // 7 pink
+            Hex("#FF5A5F"), // 0 coral red
+            Hex("#FFB000"), // 1 amber
+            Hex("#7ED957"), // 2 lime
+            Hex("#38B6FF"), // 3 sky
+            Hex("#8F6BFF"), // 4 violet
+            Hex("#FF6BC6")  // 5 pink
         };
 
-        /// <summary>Colour of a board cell; -1 (empty) is never rendered but maps to the background just in case.</summary>
+        /// <summary>Colour of a board cell; -1 (empty) maps to a transparent colour.</summary>
         public static Color BlockColor(int colorIndex)
         {
             if (colorIndex < 0)
             {
-                return Background;
+                return Color.clear;
             }
             return BlockColors[colorIndex % BlockColors.Length];
         }
 
-        private static Color Hex(string hex)
+        public static int BlockColorCount => BlockColors.Length;
+
+        public static Color Hex(string hex)
         {
             return ColorUtility.TryParseHtmlString(hex, out Color color) ? color : Color.magenta;
+        }
+
+        public static Color WithAlpha(Color color, float alpha)
+        {
+            return new Color(color.r, color.g, color.b, alpha);
+        }
+
+        public static Color Lighten(Color color, float amount)
+        {
+            return Color.Lerp(color, Color.white, amount);
+        }
+
+        public static Color Darken(Color color, float amount)
+        {
+            return Color.Lerp(color, Color.black, amount);
+        }
+
+        /// <summary>Grey version of a colour (disabled buttons keep their shape but lose their identity).</summary>
+        public static Color Desaturate(Color color, float amount)
+        {
+            float grey = color.r * 0.3f + color.g * 0.59f + color.b * 0.11f;
+            return Color.Lerp(color, new Color(grey, grey, grey, color.a), amount);
         }
     }
 }
