@@ -24,6 +24,8 @@ namespace BlastScale.Tests
 
             Assert.IsNotNull(Object.FindFirstObjectByType<Camera>(), "the scene needs a camera");
             Assert.IsNotNull(Object.FindFirstObjectByType<EventSystem>(), "the scene needs an EventSystem");
+            // Without an AudioListener Unity stays completely silent, and nothing else fails visibly.
+            Assert.IsNotNull(Object.FindFirstObjectByType<AudioListener>(), "the scene needs an AudioListener or no sound plays");
             Assert.IsNotNull(Object.FindFirstObjectByType<Canvas>(), "the bootstrap must create a canvas");
             Assert.IsNotNull(GameObject.Find("LoginScreen"), "the first screen must be the login screen");
             Assert.IsNotNull(GameObject.Find("Button Play as guest"), "the login screen must offer guest login");
