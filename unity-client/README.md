@@ -202,3 +202,26 @@ texture; run it **without** `-nographics` so the editor can render:
 "/Applications/Unity/Hub/Editor/6000.3.10f1/Unity.app/Contents/MacOS/Unity" -batchmode \
   -runTests -testPlatform PlayMode -projectPath unity-client -testResults /tmp/unity-playmode.xml -logFile /tmp/unity-playmode.log
 ```
+
+## Recording the demo video
+
+`Assets/Tests/PlayMode/GameplayVideoTests.cs` is a recorder rather than a test: it walks the offline
+demo (login, home, a full level, result, leaderboard, events, shop) and writes one JPG per rendered
+frame. `Time.captureFramerate` pins the clock to 30 steps per second, so every frame advances
+exactly 1/30 s of animation regardless of how long encoding took — the footage is smooth even though
+the recording itself runs slower than real time.
+
+```bash
+BLASTSCALE_VIDEO_DIR=/tmp/blastscale-video/frames \
+  "/Applications/Unity/Hub/Editor/6000.3.10f1/Unity.app/Contents/MacOS/Unity" -batchmode \
+  -projectPath unity-client -runTests -testPlatform PlayMode \
+  -testFilter BlastScale.Tests.GameplayVideoTests \
+  -testResults /tmp/video.xml -logFile /tmp/video.log
+```
+
+(no `-nographics`: the frames have to be rendered). Then encode with ffmpeg:
+
+```bash
+ffmpeg -framerate 30 -i /tmp/blastscale-video/frames/frame_%05d.jpg \
+  -c:v libx264 -preset slow -crf 22 -pix_fmt yuv420p -movflags +faststart docs/video/blastscale-demo.mp4
+```

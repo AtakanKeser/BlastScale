@@ -162,6 +162,28 @@ namespace BlastScale.Tests
             }
         }
 
+        /// <summary>
+        /// Renders one frame into the capture texture and writes it as JPG, without advancing the
+        /// game loop. Used by the video recorder, which needs exactly one file per rendered frame
+        /// (PNG would be several times slower and the footage is re-encoded anyway).
+        /// </summary>
+        public static void RenderFrameToFile(string path, int quality = 92)
+        {
+            Assert.IsNotNull(_captureTexture, "BeginCaptureMode must run before RenderFrameToFile");
+            Canvas.ForceUpdateCanvases();
+            _captureCamera.Render();
+            int width = _captureTexture.width;
+            int height = _captureTexture.height;
+            RenderTexture.active = _captureTexture;
+            var texture = new Texture2D(width, height, TextureFormat.RGB24, false);
+            texture.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+            texture.Apply();
+            RenderTexture.active = null;
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
+            File.WriteAllBytes(path, texture.EncodeToJPG(quality));
+            UnityEngine.Object.Destroy(texture);
+        }
+
         /// <summary>Renders the UI camera into the capture texture and writes it as PNG (needs <see cref="BeginCaptureMode"/>).</summary>
         public static IEnumerator Capture(string path)
         {
