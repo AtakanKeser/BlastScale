@@ -6,6 +6,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.elasticsearch.ElasticsearchContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -15,6 +16,9 @@ import org.testcontainers.utility.DockerImageName;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Clock;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -67,12 +71,37 @@ public abstract class AbstractIntegrationTest {
     @Autowired
     protected Clock clock;
 
+    @Autowired
+    protected StringRedisTemplate redis;
+
     protected ApiTestClient api;
 
     @BeforeEach
     void setUpClient() {
         api = new ApiTestClient(port, objectMapper);
         mutableClock().reset();
+        clearDerivedCaches();
+    }
+
+    /**
+     * Drops every Redis entry that is only a cached projection of the database.
+     *
+     * <p>All test classes share one Redis container, and a class that manipulates the clock or runs
+     * in a second Spring context can leave an entry behind whose TTL outlives it — which showed up
+     * as live-event tests failing because a freshly created event was still missing from a cached
+     * "active events" list. Derived caches can always be thrown away, so clearing them before each
+     * test removes the coupling without hiding real behaviour. Authoritative Redis data (leaderboard
+     * sorted sets, rate-limit counters, idempotency records) is deliberately left alone.
+     */
+    private void clearDerivedCaches() {
+        Set<String> keys = new HashSet<>(List.of("events:active", "config:base", "experiments:live"));
+        for (String pattern : List.of("player:*", "level:*", "experiments:player:*")) {
+            Set<String> matches = redis.keys(pattern);
+            if (matches != null) {
+                keys.addAll(matches);
+            }
+        }
+        redis.delete(keys);
     }
 
     protected MutableClock mutableClock() {

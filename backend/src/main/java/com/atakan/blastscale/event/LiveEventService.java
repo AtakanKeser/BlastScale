@@ -21,6 +21,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 
@@ -178,7 +180,7 @@ public class LiveEventService {
         ruleParser.parse(request.type(), json); // fail fast on a bad configuration
         LiveEventStatus status = startAt.isAfter(now) ? LiveEventStatus.SCHEDULED : LiveEventStatus.ACTIVE;
         LiveEvent event = events.save(new LiveEvent(request.type(), request.name(), startAt, request.endAt(), json, status, now));
-        cache.evict(ACTIVE_KEY);
+        evictActiveEvents();
         return toView(event, true);
     }
 
@@ -192,7 +194,7 @@ public class LiveEventService {
         Instant now = Instant.now(clock);
         event.setWindow(now, event.getEndAt().isAfter(now) ? event.getEndAt() : now.plus(Duration.ofHours(48)), now);
         event.transition(LiveEventStatus.ACTIVE, now);
-        cache.evict(ACTIVE_KEY);
+        evictActiveEvents();
         return toView(event, true);
     }
 
@@ -206,7 +208,7 @@ public class LiveEventService {
         Instant now = Instant.now(clock);
         event.setWindow(event.getStartAt(), now, now);
         event.transition(LiveEventStatus.ENDED, now);
-        cache.evict(ACTIVE_KEY);
+        evictActiveEvents();
         finalizeEvent(event);
         return toView(event, true);
     }
@@ -218,7 +220,7 @@ public class LiveEventService {
             throw new BlastScaleException(ErrorCode.EVENT_INVALID_STATE, "Event is already " + event.getStatus());
         }
         event.transition(LiveEventStatus.CANCELLED, Instant.now(clock));
-        cache.evict(ACTIVE_KEY);
+        evictActiveEvents();
         return toView(event, true);
     }
 
@@ -231,7 +233,7 @@ public class LiveEventService {
         List<LiveEvent> due = events.findByStatusAndStartAtLessThanEqual(LiveEventStatus.SCHEDULED, now);
         due.forEach(e -> e.transition(LiveEventStatus.ACTIVE, now));
         if (!due.isEmpty()) {
-            cache.evict(ACTIVE_KEY);
+            evictActiveEvents();
         }
         return due.size();
     }
@@ -246,7 +248,7 @@ public class LiveEventService {
             finalizeEvent(event);
         }
         if (!due.isEmpty()) {
-            cache.evict(ACTIVE_KEY);
+            evictActiveEvents();
         }
         return due.size();
     }
@@ -294,6 +296,27 @@ public class LiveEventService {
     }
 
     // ------------------------------------------------------------------ helpers
+
+    /**
+     * Drops the cached active-event list now <b>and</b> once the surrounding transaction commits.
+     *
+     * <p>Evicting only inside the transaction leaves a race: another request (or another instance)
+     * that reads the list between the eviction and the commit reloads the pre-commit state and
+     * re-caches it for the whole TTL, so a freshly started event can stay invisible for half a
+     * minute. The after-commit eviction closes that window; the immediate one keeps the current
+     * request consistent with its own write.
+     */
+    private void evictActiveEvents() {
+        cache.evict(ACTIVE_KEY);
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    cache.evict(ACTIVE_KEY);
+                }
+            });
+        }
+    }
 
     private EventRule rule(LiveEventView view) {
         return ruleParser.parse(LiveEventType.valueOf(view.type()), objectMapper.writeValueAsString(view.configuration()));

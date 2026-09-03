@@ -1,15 +1,20 @@
 package com.atakan.blastscale.integration;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.TestPropertySource;
 
 import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** Own Spring context with a tiny limit so the Redis counter can be exercised quickly. */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+/**
+ * Runs in its own Spring context (the differing property forces one) with a tiny limit so the Redis
+ * counter can be exercised in a few requests. It deliberately does <b>not</b> redeclare
+ * {@code @SpringBootTest}: the inherited annotation carries the base properties, so this context
+ * keeps the same relaxed validators, cache TTLs and disabled background jobs as every other
+ * integration test. Redeclaring it once made this context run with production defaults and, because
+ * both contexts share the Redis container, it poisoned other tests' caches.
+ */
 @TestPropertySource(properties = "blastscale.rate-limit.requests-per-minute=5")
 class RateLimitIntegrationTest extends AbstractIntegrationTest {
 
