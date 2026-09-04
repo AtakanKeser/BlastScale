@@ -58,17 +58,18 @@ public class IdempotencyService {
     }
 
     /**
-     * Executes {@code work} at most once for the given scope + key.
+     * Executes {@code work} at most once for the given scope + player + key.
      *
-     * @param scope logical operation, e.g. {@code level-complete}; keys are namespaced per scope
-     *              and per player by the caller so two players can never collide
-     * @param key   the client supplied Idempotency-Key (may be null: then no guard is applied)
+     * @param scope    logical operation, e.g. {@code level-complete}; also the metric tag, so it must
+     *                 be low-cardinality (never include ids in it)
+     * @param playerId namespaces the key per player so two players can never collide
+     * @param key      the client supplied Idempotency-Key (may be null: then no guard is applied)
      */
-    public <T> IdempotentResult<T> execute(String scope, String key, Class<T> type, Supplier<T> work) {
+    public <T> IdempotentResult<T> execute(String scope, long playerId, String key, Class<T> type, Supplier<T> work) {
         if (key == null || key.isBlank()) {
             return new IdempotentResult<>(work.get(), false);
         }
-        String redisKey = "idem:" + scope + ":" + key;
+        String redisKey = "idem:" + scope + ":" + playerId + ":" + key;
 
         Boolean acquired;
         try {
