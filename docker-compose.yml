@@ -26,7 +26,11 @@ services:
       SPRING_DATA_REDIS_HOST: redis
       SPRING_MONGODB_URI: mongodb://mongo:27017/blastscale?serverSelectionTimeoutMS=2000&connectTimeoutMS=2000&socketTimeoutMS=5000
       SPRING_ELASTICSEARCH_URIS: http://elasticsearch:9200
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75 -XX:+UseG1GC"
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=60 -XX:+UseG1GC"
+    # Bound each replica so three of them plus the stores fit in a laptop's Docker VM;
+    # MaxRAMPercentage sizes the heap relative to this limit (the rest is metaspace,
+    # thread stacks and off-heap buffers — a 1 GiB limit left the JVM GC-thrashing).
+    mem_limit: 1536m
     depends_on:
       mysql:
         condition: service_healthy
@@ -163,7 +167,9 @@ services:
     restart: unless-stopped
 
   # Load generator. Not started by default; run a scenario with:
-  #   docker compose --profile loadtest run --rm k6 run /scripts/scenario.js
+  #   docker compose --profile loadtest run --rm --no-deps k6 run /scripts/scenario.js
+  # (--no-deps matters: without it "compose run" reconciles the api service back to one
+  #  replica and silently removes the extra ones started with --scale)
   k6:
     image: grafana/k6:1.1.0
     profiles: ["loadtest"]
@@ -172,8 +178,6 @@ services:
     volumes:
       - ./load-test:/scripts:ro
       - ./load-test/results:/results
-    depends_on:
-      - nginx
 
 volumes:
   mysql-data:
