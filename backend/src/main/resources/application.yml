@@ -27,14 +27,18 @@ spring:
     locations: classpath:db/migration
 
   # ----- Redis: cache / leaderboard / rate limit / idempotency / locks -----
-  data:
-    redis:
-      host: localhost
-      port: 6379
-      timeout: 2s
-    # ----- MongoDB: level & event configuration documents -----
-    mongodb:
-      uri: mongodb://localhost:27017/blastscale
+  # (Spring Boot 4 moved the client settings from spring.data.redis.* to spring.redis.*)
+  redis:
+    host: localhost
+    port: 6379
+    timeout: 2s
+    connect-timeout: 2s
+
+  # ----- MongoDB: level & event configuration documents -----
+  # Short timeouts: when MongoDB is down we want to fall back to procedural levels within
+  # a couple of seconds, not after the driver's 30s default server selection timeout.
+  mongodb:
+    uri: mongodb://localhost:27017/blastscale?serverSelectionTimeoutMS=2000&connectTimeoutMS=2000&socketTimeoutMS=5000
 
   # ----- Elasticsearch: telemetry index (fed asynchronously through the outbox) -----
   elasticsearch:
@@ -65,11 +69,12 @@ management:
       probes:
         enabled: true                    # exposes /actuator/health/liveness and /readiness
       group:
-        # Readiness only depends on the stores gameplay cannot live without.
-        # Elasticsearch (telemetry) or MongoDB (has a procedural fallback) being down
-        # must NOT remove this instance from the load balancer.
+        # Readiness only depends on the store gameplay cannot live without: MySQL.
+        # Redis (caches fall back to the DB, rate limiting fails open, leaderboard degrades to
+        # 503), MongoDB (procedural level fallback) and Elasticsearch (outbox buffers events)
+        # being down must NOT remove this instance from the load balancer.
         readiness:
-          include: db,redis
+          include: db
         liveness:
           include: livenessState
   metrics:

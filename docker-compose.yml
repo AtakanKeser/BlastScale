@@ -23,8 +23,8 @@ services:
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-blastscale}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-blastscale}
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-blastscale}
-      SPRING_DATA_REDIS_HOST: redis
-      SPRING_DATA_MONGODB_URI: mongodb://mongo:27017/blastscale
+      SPRING_REDIS_HOST: redis
+      SPRING_MONGODB_URI: mongodb://mongo:27017/blastscale?serverSelectionTimeoutMS=2000&connectTimeoutMS=2000&socketTimeoutMS=5000
       SPRING_ELASTICSEARCH_URIS: http://elasticsearch:9200
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75 -XX:+UseG1GC"
     depends_on:
