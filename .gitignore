@@ -36,3 +36,7 @@ load-test/results/*.html
 
 # ---- Secrets ----
 .env
+
+# ---- iOS build artefacts (machine specific) ----
+unity-client/Assets/Resources/server-config.json
+unity-client/Assets/Resources/server-config.json.meta

@@ -493,6 +493,27 @@ Raw k6 summaries are written to `load-test/results/` by every run.
   events, experiments, remote configuration, leaderboard, levels, system health. See
   [admin-panel/README.md](admin-panel/README.md).
 
+## Playing on an iPhone
+
+The Unity client runs on a real device with a development signature; `unity-client/build-ios.sh`
+does the whole chain (Unity export → `xcodebuild` with automatic signing → install → launch):
+
+```bash
+docker compose up -d                                  # the phone talks to the backend on this Mac
+xcrun devicectl list devices                          # copy the device identifier
+BLASTSCALE_IOS_TEAM_ID=<your Apple team id> BLASTSCALE_IOS_DEVICE=<device id> ./unity-client/build-ios.sh
+```
+
+Requirements: Xcode with the iOS SDK, Unity 6000.3 with iOS Build Support, your Apple ID signed in
+to Xcode (the team id is the `OU` of your "Apple Development" certificate:
+`security find-certificate -c "Apple Development" -p | openssl x509 -noout -subject`), Developer Mode
+enabled on the phone, and the phone **unlocked** while the script installs. The script bakes this
+Mac's LAN address (`http://<lan-ip>:8080`) into the app as the default server, so phone and Mac must
+be on the same Wi-Fi; override it with `BLASTSCALE_SERVER_URL`, or change it on the login screen.
+Development builds allow plain HTTP for that reason (`InsecureHttpOption.AlwaysAllowed` in
+`IosBuild.cs`); a store build would use HTTPS. Apps signed with a free personal team expire after
+seven days — just run the script again.
+
 ## Repository layout
 
 ```
