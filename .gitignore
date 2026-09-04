@@ -1,0 +1,38 @@
+# ---- Java / Maven ----
+backend/target/
+*.class
+*.jar
+!backend/.mvn/wrapper/maven-wrapper.jar
+*.log
+hs_err_pid*
+
+# ---- IDE ----
+.idea/
+*.iml
+.vscode/
+*.swp
+.DS_Store
+
+# ---- Node / admin panel ----
+admin-panel/node_modules/
+admin-panel/dist/
+admin-panel/.vite/
+
+# ---- Unity ----
+unity-client/[Ll]ibrary/
+unity-client/[Tt]emp/
+unity-client/[Oo]bj/
+unity-client/[Bb]uild/
+unity-client/[Bb]uilds/
+unity-client/[Ll]ogs/
+unity-client/[Uu]ser[Ss]ettings/
+unity-client/*.csproj
+unity-client/*.sln
+unity-client/.vs/
+
+# ---- Load test output ----
+load-test/results/*.json
+load-test/results/*.html
+
+# ---- Secrets ----
+.env

@@ -1,0 +1,19 @@
+# Prometheus scrape configuration for the BlastScale stack.
+# The API is discovered through Docker's embedded DNS, so every replica started with
+# `docker compose up --scale api=3` is scraped automatically without editing this file.
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: "blastscale-api"
+    metrics_path: /actuator/prometheus
+    dns_sd_configs:
+      - names: ["api"]     # docker-compose service name; resolves to one A record per replica
+        type: A
+        port: 8080
+        refresh_interval: 10s
+
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]

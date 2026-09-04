@@ -1,0 +1,182 @@
+# One command brings up the whole BlastScale platform:
+#
+#   docker compose up --build
+#
+# Scale the stateless API horizontally (nginx load-balances across replicas):
+#
+#   docker compose up --build --scale api=3
+#
+# Ports exposed on the host:
+#   8080  nginx  -> API replicas          3000  Grafana (admin/admin)
+#   3001  Admin / LiveOps panel           9090  Prometheus
+#   3306  MySQL   6379 Redis   27017 MongoDB   9200 Elasticsearch
+
+services:
+  api:
+    build:
+      context: ./backend
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      BLASTSCALE_JWT_SECRET: ${BLASTSCALE_JWT_SECRET:-change-me-please-this-is-only-a-local-development-secret-0123456789}
+      BLASTSCALE_ADMIN_USERNAME: ${BLASTSCALE_ADMIN_USERNAME:-admin}
+      BLASTSCALE_ADMIN_PASSWORD: ${BLASTSCALE_ADMIN_PASSWORD:-admin12345}
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-blastscale}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-blastscale}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-blastscale}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_MONGODB_URI: mongodb://mongo:27017/blastscale
+      SPRING_ELASTICSEARCH_URIS: http://elasticsearch:9200
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75 -XX:+UseG1GC"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      # Elasticsearch is intentionally NOT a hard dependency: gameplay must keep working
+      # when telemetry storage is down (see "Failure Scenarios" in the README).
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  admin-panel:
+    build:
+      context: ./admin-panel
+      args:
+        VITE_API_BASE_URL: http://localhost:8080
+    ports:
+      - "3001:80"
+    depends_on:
+      - nginx
+    restart: unless-stopped
+
+  mysql:
+    image: mysql:8.4
+    command: >-
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_0900_ai_ci
+      --max-connections=500
+      --innodb-buffer-pool-size=512M
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-blastscale}
+      MYSQL_USER: ${MYSQL_USER:-blastscale}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-blastscale}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  mongo:
+    image: mongo:8.0
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand({ ping: 1 }).ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.1.5
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:12.1.1
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+  # Load generator. Not started by default; run a scenario with:
+  #   docker compose --profile loadtest run --rm k6 run /scripts/scenario.js
+  k6:
+    image: grafana/k6:1.1.0
+    profiles: ["loadtest"]
+    environment:
+      BASE_URL: http://nginx:8080
+    volumes:
+      - ./load-test:/scripts:ro
+      - ./load-test/results:/results
+    depends_on:
+      - nginx
+
+volumes:
+  mysql-data:
+  redis-data:
+  mongo-data:
+  es-data:
+  prometheus-data:
+  grafana-data:

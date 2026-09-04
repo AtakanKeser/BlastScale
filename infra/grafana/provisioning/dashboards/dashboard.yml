@@ -1,0 +1,13 @@
+# Grafana dashboard provisioning: every JSON file in /var/lib/grafana/dashboards
+# is loaded as a dashboard on startup.
+apiVersion: 1
+providers:
+  - name: "BlastScale"
+    orgId: 1
+    folder: ""
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
