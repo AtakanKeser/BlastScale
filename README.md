@@ -17,6 +17,12 @@ investigations, and Prometheus/Grafana observability — all runnable with one c
 docker compose up --build
 ```
 
+<p align="center">
+  <img src="docs/video/blastscale-gameplay.gif" width="320" alt="BlastScale gameplay: tapping groups of blocks, particles, combo banners and the score filling up">
+  <br>
+  <em><a href="docs/video/blastscale-demo.mp4">Full 25 second demo video</a> — login, level, result, leaderboard, live events and shop.</em>
+</p>
+
 | What | Where |
 |------|-------|
 | API (through the nginx load balancer) | http://localhost:8080 |
@@ -485,6 +491,7 @@ Raw k6 summaries are written to `load-test/results/` by every run.
 ## Clients
 
 <p align="center">
+  <img src="docs/video/blastscale-gameplay.gif" width="200" alt="Gameplay recording">
   <img src="docs/screenshots/01-login.png" width="180" alt="Login screen">
   <img src="docs/screenshots/02-home.png" width="180" alt="Home screen">
   <img src="docs/screenshots/05-gameplay-pop.png" width="180" alt="Gameplay with a group popping">
