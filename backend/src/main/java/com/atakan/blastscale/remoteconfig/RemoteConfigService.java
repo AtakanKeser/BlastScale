@@ -58,6 +58,11 @@ public class RemoteConfigService {
                 () -> new BaseConfig(loadBaseConfig())).values();
     }
 
+    /** Convenience for global feature flags that do not depend on the player. */
+    public boolean baseConfigBoolean(String key) {
+        return new ResolvedConfig(baseConfig(), List.of()).getBoolean(key);
+    }
+
     /** Base configuration with the player's experiment variants applied on top. */
     public ResolvedConfig resolveFor(long playerId) {
         Map<String, Object> values = new LinkedHashMap<>(baseConfig());
