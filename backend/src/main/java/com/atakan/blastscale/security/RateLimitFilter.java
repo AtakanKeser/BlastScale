@@ -66,7 +66,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
         long window = Instant.now(clock).getEpochSecond() / 60;
-        String key = "rl:" + subject(request) + ":" + window;
+        String subject = subject(request);
+        String key = "rl:" + subject + ":" + window;
 
         long count;
         try {
@@ -81,7 +82,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return;
         }
 
-        int limit = properties.requestsPerMinute();
+        int limit = subject.startsWith("ip:") ? properties.anonymousRequestsPerMinute() : properties.requestsPerMinute();
         response.setHeader("X-RateLimit-Limit", Integer.toString(limit));
         response.setHeader("X-RateLimit-Remaining", Long.toString(Math.max(0, limit - count)));
 
@@ -99,14 +100,17 @@ public class RateLimitFilter extends OncePerRequestFilter {
         chain.doFilter(request, response);
     }
 
-    /** Player id when authenticated, otherwise the client IP (honouring X-Forwarded-For from nginx). */
+    /**
+     * Player id when authenticated, otherwise the client IP. The address comes from
+     * {@code request.getRemoteAddr()}, which Spring's forwarded-header support already resolved
+     * from {@code X-Forwarded-For}; nginx overwrites that header with the real peer address
+     * (see infra/nginx/nginx.conf), so a client cannot dodge the limit by spoofing it.
+     */
     private static String subject(HttpServletRequest request) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth instanceof JwtAuthenticationToken jwt) {
             return "p:" + jwt.getToken().getSubject();
         }
-        String forwarded = request.getHeader("X-Forwarded-For");
-        String ip = forwarded != null && !forwarded.isBlank() ? forwarded.split(",")[0].trim() : request.getRemoteAddr();
-        return "ip:" + ip;
+        return "ip:" + request.getRemoteAddr();
     }
 }

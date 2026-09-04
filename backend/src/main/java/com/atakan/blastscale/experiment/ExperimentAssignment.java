@@ -10,7 +10,7 @@ import java.time.Instant;
 /**
  * Persisted variant assignment.
  *
- * <p>Bucketing is deterministic, so strictly speaking the assignment could be recomputed on every
+ * <p>Bucketing is deterministic, so in principle the assignment could be recomputed on every
  * request. It is stored anyway because (1) analytics needs to know exactly who was exposed to
  * which variant and when, and (2) it makes the assignment <b>sticky</b> even if the variant weights
  * are changed while the experiment is running.
