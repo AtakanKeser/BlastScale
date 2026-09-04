@@ -126,6 +126,10 @@ blastscale:
       8: 500
       9: 500
       10: 500
+  jobs:
+    # Set to false on replicas that should only serve traffic (the Redis locks already prevent
+    # duplicate runs, this just keeps background work off the hot path where desired).
+    enabled: true
   outbox:
     poll-interval: 1s
     batch-size: 200
