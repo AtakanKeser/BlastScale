@@ -45,6 +45,10 @@ spring:
   jackson:
     default-property-inclusion: non_null
 
+  web:
+    locale: en_US                  # validation messages are always English, whatever the host locale
+    locale-resolver: fixed
+
 server:
   port: 8080
   shutdown: graceful                     # finish in-flight requests on SIGTERM (rolling deploys)
