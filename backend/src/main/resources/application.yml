@@ -1,0 +1,123 @@
+# ---------------------------------------------------------------------------
+# BlastScale backend configuration.
+# Every value can be overridden by environment variables (Spring relaxed binding),
+# e.g. SPRING_DATASOURCE_URL, BLASTSCALE_JWT_SECRET. docker-compose.yml does exactly that.
+# ---------------------------------------------------------------------------
+spring:
+  application:
+    name: blastscale
+
+  # ----- MySQL: the transactional source of truth for player state -----
+  datasource:
+    url: jdbc:mysql://localhost:3306/blastscale?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: blastscale
+    password: blastscale
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 5000
+  jpa:
+    open-in-view: false            # no lazy loading in controllers; services own transactions
+    hibernate:
+      ddl-auto: validate           # the schema is owned by Flyway migrations, never by Hibernate
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+  # ----- Redis: cache / leaderboard / rate limit / idempotency / locks -----
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 2s
+    # ----- MongoDB: level & event configuration documents -----
+    mongodb:
+      uri: mongodb://localhost:27017/blastscale
+
+  # ----- Elasticsearch: telemetry index (fed asynchronously through the outbox) -----
+  elasticsearch:
+    uris: http://localhost:9200
+    connection-timeout: 2s
+    socket-timeout: 5s
+
+  jackson:
+    default-property-inclusion: non_null
+
+server:
+  port: 8080
+  shutdown: graceful                     # finish in-flight requests on SIGTERM (rolling deploys)
+  forward-headers-strategy: native       # trust X-Forwarded-* from the nginx load balancer
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true                    # exposes /actuator/health/liveness and /readiness
+      group:
+        # Readiness only depends on the stores gameplay cannot live without.
+        # Elasticsearch (telemetry) or MongoDB (has a procedural fallback) being down
+        # must NOT remove this instance from the load balancer.
+        readiness:
+          include: db,redis
+        liveness:
+          include: livenessState
+  metrics:
+    tags:
+      application: blastscale
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true       # enables p50/p95/p99 via histogram_quantile in Grafana
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+
+# ---------------------------------------------------------------------------
+# Application specific settings (bound to *Properties records in the code base)
+# ---------------------------------------------------------------------------
+blastscale:
+  jwt:
+    # HMAC-SHA256 secret. Override in production! Must be >= 32 bytes.
+    secret: ${BLASTSCALE_JWT_SECRET:change-me-please-this-is-only-a-local-development-secret-0123456789}
+    issuer: blastscale
+    access-token-ttl: 12h
+  admin:
+    # Bootstrap admin account, created on first start if missing.
+    username: ${BLASTSCALE_ADMIN_USERNAME:admin}
+    password: ${BLASTSCALE_ADMIN_PASSWORD:admin12345}
+  rate-limit:
+    enabled: true
+    requests-per-minute: 600             # per player (or per IP for anonymous calls)
+  cache:
+    player-profile-ttl: 10m
+    remote-config-ttl: 60s
+    active-events-ttl: 30s
+    level-definition-ttl: 10m
+  idempotency:
+    ttl: 24h                             # how long a processed Idempotency-Key is remembered
+  gameplay:
+    session-ttl: 2h                      # a level session older than this cannot be completed
+    min-millis-per-move: 150             # faster than this is not humanly possible -> rejected
+  leaderboard:
+    reward-coins:                        # rank -> coins paid by LeaderboardFinalizationJob
+      1: 5000
+      2: 3000
+      3: 2000
+      4: 1000
+      5: 1000
+      6: 500
+      7: 500
+      8: 500
+      9: 500
+      10: 500
+  outbox:
+    poll-interval: 1s
+    batch-size: 200
+    max-attempts: 25
