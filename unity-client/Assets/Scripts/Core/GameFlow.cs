@@ -10,7 +10,8 @@ namespace BlastScale.Client.Core
     /// <summary>
     /// Multi-step flows shared by several screens (sign in, start a level, submit a result...).
     /// Screens stay thin: they render state and call into here. Every method is a coroutine that
-    /// talks to the server through <see cref="ApiClient"/> and reports problems via toast/modal.
+    /// talks to the server through <see cref="IApiClient"/> and reports problems via toast/modal.
+    /// The offline demo swaps the client implementation; the flows themselves do not change.
     /// </summary>
     public sealed class GameFlow
     {
@@ -29,7 +30,10 @@ namespace BlastScale.Client.Core
         }
 
         private GameState State => _app.State;
-        private ApiClient Api => _app.Api;
+        private IApiClient Api => _app.Api;
+
+        /// <summary>True while playing against the local stand-in instead of a server.</summary>
+        public bool IsOffline => _app.IsOffline;
 
         // ------------------------------------------------------------------ authentication
 
@@ -47,6 +51,18 @@ namespace BlastScale.Client.Core
         public IEnumerator Register(string username, string password)
         {
             yield return Authenticate(ApiRoutes.AuthRegister, new RegisterRequest { username = username, password = password });
+        }
+
+        /// <summary>
+        /// Switches every call to the local offline client and signs in as the demo player. Levels
+        /// are generated locally, completions are replayed by the local engine, coins and lives
+        /// live in PlayerPrefs — no server is contacted.
+        /// </summary>
+        public IEnumerator StartOfflineDemo()
+        {
+            State.Logout();
+            _app.UseOffline(true);
+            yield return LoginAsGuest();
         }
 
         /// <summary>Exchanges credentials for a token, loads config + profile, then shows the home screen.</summary>
@@ -99,9 +115,11 @@ namespace BlastScale.Client.Core
             }
         }
 
+        /// <summary>Forgets the session (and leaves the offline demo) and shows the login screen.</summary>
         public void Logout()
         {
             State.Logout();
+            _app.UseOffline(false);
             _app.Screens.Show(new LoginScreen());
         }
 
@@ -220,10 +238,20 @@ namespace BlastScale.Client.Core
                     _app.Toast.Show("Please sign in again", true);
                     break;
                 case ApiException.NetworkErrorCode:
-                    _app.Toast.Show(error.Message + "\nServer: " + ClientConfig.BaseUrl, true, 4f);
+                    _app.Modal.Show("Cannot reach the server", error.Message + "\n\nServer: " + ClientConfig.BaseUrl,
+                        ModalButton.Primary("OK", null));
                     break;
                 default:
-                    _app.Toast.Show(error.Message, true);
+                    if (error.HttpStatus >= 500 || error.Code == ApiException.ParseErrorCode)
+                    {
+                        // Server-side failures deserve a dialog the player must acknowledge;
+                        // business rules ("not enough coins") are fine as a passing toast.
+                        _app.Modal.Show("Something went wrong", error.Message + "\n(" + error.Code + ")", ModalButton.Primary("OK", null));
+                    }
+                    else
+                    {
+                        _app.Toast.Show(error.Message, true);
+                    }
                     break;
             }
         }

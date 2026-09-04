@@ -1,5 +1,8 @@
+using BlastScale.Client.Audio;
 using BlastScale.Client.Net;
+using BlastScale.Client.Net.Offline;
 using BlastScale.Client.UI;
+using BlastScale.Client.UI.Fx;
 using BlastScale.Client.UI.Screens;
 using UnityEngine;
 
@@ -7,13 +10,18 @@ namespace BlastScale.Client.Core
 {
     /// <summary>
     /// The only component in the scene. It builds the canvas and its layers, wires the services
-    /// together and shows the login screen. Everything else is created from code at runtime.
+    /// together, starts the music and shows the login screen. Everything else is created from
+    /// code at runtime.
     ///
     /// Canvas layout (sibling order = draw order):
     /// <code>
-    ///   UiCanvas
-    ///     ScreenLayer     one screen at a time (ScreenManager)
-    ///     OverlayLayer    modal dialogs, toast, loading overlay (always on top)
+    ///   UiCanvas (screen space camera)
+    ///     BackgroundLayer   gradient + drifting bokeh, ignores the safe area
+    ///     SafeArea          anchored to Screen.safeArea
+    ///       ScreenLayer     one screen at a time (ScreenManager)
+    ///       FxLayer         particles, score popups (UiParticles)
+    ///     OverlayLayer      loading overlay, modal dialogs (full screen)
+    ///       OverlaySafe     toast (safe area)
     /// </code>
     /// </summary>
     public sealed class GameBootstrap : MonoBehaviour
@@ -27,34 +35,69 @@ namespace BlastScale.Client.Core
         {
             Application.targetFrameRate = 60;
 
-            Canvas canvas = UiFactory.CreateCanvas("UiCanvas");
-            RectTransform screenLayer = UiFactory.CreateRect(canvas.transform, "ScreenLayer");
+            Camera camera = Camera.main;
+            if (camera == null)
+            {
+                camera = FindFirstObjectByType<Camera>();
+            }
+            Canvas canvas = UiFactory.CreateCanvas("UiCanvas", camera);
+            TweenRunner.Ensure();
+            AudioManager audio = AudioManager.Ensure();
+
+            RectTransform backgroundLayer = UiFactory.CreateRect(canvas.transform, "BackgroundLayer");
+            UiFactory.Stretch(backgroundLayer);
+            BokehBackground.Create(backgroundLayer);
+
+            RectTransform safeArea = UiFactory.CreateRect(canvas.transform, "SafeArea");
+            UiFactory.Stretch(safeArea);
+            safeArea.gameObject.AddComponent<SafeAreaFitter>();
+            RectTransform screenLayer = UiFactory.CreateRect(safeArea, "ScreenLayer");
             UiFactory.Stretch(screenLayer);
+            RectTransform fxLayer = UiFactory.CreateRect(safeArea, "FxLayer");
+            UiFactory.Stretch(fxLayer);
+            UiParticles fx = UiParticles.Create(fxLayer);
+
             RectTransform overlayLayer = UiFactory.CreateRect(canvas.transform, "OverlayLayer");
             UiFactory.Stretch(overlayLayer);
+            RectTransform overlaySafe = UiFactory.CreateRect(overlayLayer, "OverlaySafe");
+            UiFactory.Stretch(overlaySafe);
+            overlaySafe.gameObject.AddComponent<SafeAreaFitter>();
 
             var state = new GameState();
             var screens = new ScreenManager(screenLayer);
+            var online = new ApiClient(() => state.Token);
+            var offline = new OfflineApiClient();
             _app = new AppContext
             {
                 Runner = this,
                 State = state,
-                Api = new ApiClient(() => state.Token),
+                OnlineApi = online,
+                OfflineApi = offline,
                 Screens = screens,
                 Modal = new ModalDialog(overlayLayer),
-                Toast = new Toast(this, overlayLayer),
-                Loading = new LoadingOverlay(overlayLayer)
+                Loading = new LoadingOverlay(overlayLayer, this),
+                Toast = new Toast(this, overlaySafe),
+                Audio = audio,
+                Fx = fx,
+                Canvas = canvas,
+                ScreenLayer = screenLayer,
+                FxLayer = fxLayer
             };
+            _app.UseOffline(false);
             _app.Flow = new GameFlow(_app);
             screens.Bind(_app);
 
-            _app.Api.BusyChanged += _app.Loading.SetVisible;
-            _app.Api.Unauthorized += OnUnauthorized;
+            // Both clients report through the same overlay; only one is active at a time.
+            online.BusyChanged += _app.Loading.SetVisible;
+            online.Unauthorized += OnUnauthorized;
+            offline.BusyChanged += _app.Loading.SetVisible;
+            offline.Unauthorized += OnUnauthorized;
         }
 
         private void Start()
         {
             _app.Screens.Show(new LoginScreen());
+            _app.Audio.StartMusic();
         }
 
         /// <summary>An authenticated call answered 401: the token expired, go back to sign in.</summary>

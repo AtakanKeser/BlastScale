@@ -27,6 +27,12 @@ BLASTSCALE_SERVER_URL="$SERVER_URL" BLASTSCALE_IOS_TEAM_ID="$TEAM_ID" BLASTSCALE
 # Note: the app's bundle id comes from the Unity player settings (IosBuild.cs); it must NOT be
 # forced with PRODUCT_BUNDLE_IDENTIFIER here, or the embedded UnityFramework would get the same id
 # and iOS would refuse the install ("DuplicateIdentifier").
+# iOS local-network privacy: without this usage description the system can silently refuse
+# connections to LAN addresses such as the development backend on this Mac.
+PLIST="$PROJECT/build/ios/Info.plist"
+/usr/libexec/PlistBuddy -c "Print :NSLocalNetworkUsageDescription" "$PLIST" >/dev/null 2>&1 || \
+  /usr/libexec/PlistBuddy -c "Add :NSLocalNetworkUsageDescription string 'BlastScale connects to your development server on the local network.'" "$PLIST"
+
 echo "==> 2/3 xcodebuild (automatic signing, team $TEAM_ID)"
 xcodebuild -project "$PROJECT/build/ios/Unity-iPhone.xcodeproj" -scheme Unity-iPhone -configuration Release \
   -sdk iphoneos -destination "generic/platform=iOS" -derivedDataPath "$DERIVED" \

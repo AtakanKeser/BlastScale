@@ -1,14 +1,17 @@
 using System.Text.RegularExpressions;
 using BlastScale.Client.Net;
+using BlastScale.Client.UI.Fx;
+using BlastScale.Client.UI.Gfx;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace BlastScale.Client.UI.Screens
 {
     /// <summary>
-    /// First screen: one-tap guest login (device id based) or username/password login/register.
-    /// It also exposes the server URL so a phone can point at a laptop on the same network without
-    /// a rebuild; the value is stored through <see cref="ClientConfig"/>.
+    /// First screen: one-tap guest login (device id based), username/password login/register, and
+    /// the "Offline demo" that plays against the local engine without any server. It also exposes
+    /// the server URL so a phone can point at a laptop on the same network without a rebuild; the
+    /// value is stored through <see cref="ClientConfig"/>.
     /// </summary>
     public sealed class LoginScreen : UiScreen
     {
@@ -17,32 +20,77 @@ namespace BlastScale.Client.UI.Screens
         private InputField _serverUrl;
         private InputField _username;
         private InputField _password;
+        private RectTransform _logoRow;
+        private Text _title;
 
         protected override void Build(RectTransform root)
         {
-            RectTransform column = CreateContentColumn(root, 20f, 60);
+            RectTransform column = CreateContentColumn(root, 14f, 56, 40, 40);
 
-            UiFactory.CreateSpacer(column);
-            UiFactory.CreateLabel(column, "BlastScale", UiTheme.TitleSize, UiTheme.Text, TextAnchor.MiddleCenter, FontStyle.Bold);
-            UiFactory.CreateLabel(column, "Server-authoritative blast puzzle", UiTheme.BodySize, UiTheme.Muted);
-            UiFactory.CreateSpacer(column, 0.4f);
+            UiFactory.CreateSpacer(column, 0.8f);
+            _title = UiFactory.CreateTitle(column, "BlastScale", UiTheme.TitleSize + 8, UiTheme.Text);
+            UiFactory.AddOutline(_title, 3f, new Color(0.2f, 0.05f, 0.35f, 0.6f));
+            UiFactory.CreateLabel(column, "Server-authoritative blast puzzle", UiTheme.BodySize - 2, UiTheme.TextSoft, TextAnchor.MiddleCenter, UiFont.BodyBold);
+            BuildLogoBlocks(column);
+            UiFactory.CreateSpacer(column, 0.5f);
 
-            UiFactory.CreateLabel(column, "Server URL", UiTheme.SmallSize, UiTheme.Muted, TextAnchor.MiddleLeft);
-            _serverUrl = UiFactory.CreateInputField(column, ClientConfig.DefaultBaseUrl);
+            RectTransform card = UiFactory.CreateCard(column, "LoginCard", UiTheme.CardRadius, 32, 12);
+            UiFactory.CreateLabel(card, "Server URL", UiTheme.TinySize, UiTheme.Muted, TextAnchor.MiddleLeft, UiFont.BodyBold);
+            _serverUrl = UiFactory.CreateInputField(card, ClientConfig.DefaultBaseUrl, false, 96f);
             _serverUrl.text = ClientConfig.BaseUrl;
+            UiFactory.CreateGap(card, 2f);
+            UiFactory.CreateButton(card, "Play as guest", OnGuest, ButtonStyle.Primary, UiTheme.HeadingSize - 6, UiTheme.ButtonHeight, -1f, IconFactory.Play());
 
-            UiFactory.CreateButton(column, "Play as guest", OnGuest, UiTheme.Accent, UiTheme.HeadingSize, 130f);
+            RectTransform orRow = UiFactory.CreateRow(card, "Or", 40f, 16f);
+            UiFactory.SetLayout(UiFactory.CreateDivider(orRow).gameObject, flexibleWidth: 1f, preferredHeight: 2f);
+            UiFactory.CreateLabel(orRow, "or sign in", UiTheme.TinySize, UiTheme.Muted, TextAnchor.MiddleCenter, UiFont.BodyBold);
+            UiFactory.SetLayout(UiFactory.CreateDivider(orRow).gameObject, flexibleWidth: 1f, preferredHeight: 2f);
 
-            UiFactory.CreateLabel(column, "or sign in with an account", UiTheme.SmallSize, UiTheme.Muted);
-            _username = UiFactory.CreateInputField(column, "Username");
-            _password = UiFactory.CreateInputField(column, "Password", true);
-            RectTransform buttons = UiFactory.CreateRow(column, "AuthButtons", 110f);
-            UiFactory.CreateButton(buttons, "Login", OnLogin, UiTheme.Secondary);
-            UiFactory.CreateButton(buttons, "Register", OnRegister, UiTheme.Secondary);
+            _username = UiFactory.CreateInputField(card, "Username", false, 96f);
+            _password = UiFactory.CreateInputField(card, "Password", true, 96f);
+            RectTransform buttons = UiFactory.CreateRow(card, "AuthButtons", UiTheme.ButtonHeight - 10f, 14f);
+            UiFactory.CreateButton(buttons, "Login", OnLogin, ButtonStyle.Blue, UiTheme.BodySize, UiTheme.ButtonHeight - 10f);
+            UiFactory.CreateButton(buttons, "Register", OnRegister, ButtonStyle.Secondary, UiTheme.BodySize, UiTheme.ButtonHeight - 10f);
+
+            UiFactory.CreateGap(column, 4f);
+            UiFactory.CreateButton(column, "Offline demo", OnOfflineDemo, ButtonStyle.Ghost, UiTheme.BodySize, UiTheme.ButtonHeight - 10f, -1f, IconFactory.Bolt(), UiTheme.Gold);
+            UiFactory.CreateLabel(column, "Plays levels on this device without a server. Progress is local only.",
+                UiTheme.TinySize, UiTheme.Muted, TextAnchor.MiddleCenter, UiFont.Body);
 
             UiFactory.CreateSpacer(column);
             UiFactory.CreateLabel(column, "Scores are computed by the server by replaying your moves.",
-                UiTheme.SmallSize, UiTheme.Muted);
+                UiTheme.TinySize, UiTheme.Muted, TextAnchor.MiddleCenter, UiFont.Body);
+        }
+
+        /// <summary>A row of the six block sprites under the title: instantly says "this is a block game".</summary>
+        private void BuildLogoBlocks(RectTransform column)
+        {
+            _logoRow = UiFactory.CreateRow(column, "LogoBlocks", 110f, 4f);
+            UiFactory.CreateSpacer(_logoRow);
+            for (int i = 0; i < UiTheme.BlockColorCount; i++)
+            {
+                Image block = UiFactory.CreateImage(_logoRow, "Block " + i, BlockSprites.Get(i), Color.white);
+                UiFactory.SetLayout(block.gameObject, preferredWidth: 110f, preferredHeight: 110f, minWidth: 110f);
+            }
+            UiFactory.CreateSpacer(_logoRow);
+        }
+
+        protected override void OnShown()
+        {
+            // The blocks bounce in one after another; the title breathes gently.
+            int index = 0;
+            foreach (Transform child in _logoRow)
+            {
+                if (child.GetComponent<Image>() == null) continue;
+                Tween.ScaleFrom(child, 0f, 0.5f, Ease.OutBack, 0.15f + index * 0.07f);
+                index++;
+            }
+            Tween.Pulse(_title.transform, 0.025f, 2.2f);
+        }
+
+        protected override void OnDismissed()
+        {
+            Tween.Kill(_title.transform);
         }
 
         /// <summary>Persists whatever is in the URL field so every call (including this login) uses it.</summary>
@@ -74,6 +122,11 @@ namespace BlastScale.Client.UI.Screens
             {
                 Run(App.Flow.Register(_username.text.Trim(), _password.text));
             }
+        }
+
+        private void OnOfflineDemo()
+        {
+            Run(App.Flow.StartOfflineDemo());
         }
 
         /// <summary>Mirrors the server's bean validation so obvious mistakes never leave the device.</summary>
