@@ -39,6 +39,8 @@ namespace BlastScale.EditorTools
             camera.nearClipPlane = 0.3f;
             camera.farClipPlane = 100f;
             cameraObject.transform.position = new Vector3(0f, 0f, -10f);
+            // The scene's "microphone": without it Unity plays no audio at all.
+            cameraObject.AddComponent<AudioListener>();
 
             var eventSystem = new GameObject("EventSystem");
             eventSystem.AddComponent<EventSystem>();

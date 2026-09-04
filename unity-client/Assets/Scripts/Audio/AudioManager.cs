@@ -113,6 +113,7 @@ namespace BlastScale.Client.Audio
 
         private void Initialise()
         {
+            EnsureAudioListener();
             _musicEnabled = PlayerPrefs.GetInt(MusicPrefKey, 1) == 1;
             _sfxEnabled = PlayerPrefs.GetInt(SfxPrefKey, 1) == 1;
 
@@ -138,6 +139,24 @@ namespace BlastScale.Client.Audio
             _musicSource = gameObject.AddComponent<AudioSource>();
             _musicSource.playOnAwake = false;
             _musicSource.spatialBlend = 0f;
+        }
+
+        /// <summary>
+        /// Unity plays nothing at all when the scene has no <see cref="AudioListener"/> — it is the
+        /// microphone of the scene. The generated scene carries one on the camera, but this runtime
+        /// guarantee keeps sound working in a scene that was built or edited without it (which is
+        /// exactly how the first device build ended up completely silent).
+        /// </summary>
+        private static void EnsureAudioListener()
+        {
+            if (Object.FindFirstObjectByType<AudioListener>() != null)
+            {
+                return;
+            }
+            Camera camera = Camera.main;
+            GameObject host = camera != null ? camera.gameObject : new GameObject("AudioListener");
+            host.AddComponent<AudioListener>();
+            Debug.Log("[audio] added the missing AudioListener to " + host.name);
         }
 
         private void PlayInternal(Sfx sfx, float pitch, float volume)
