@@ -16,6 +16,11 @@ spring:
       maximum-pool-size: 20
       minimum-idle: 5
       connection-timeout: 5000
+      # READ COMMITTED instead of InnoDB's REPEATABLE READ default: no gap/next-key locks on
+      # range scans, which removes a whole class of deadlocks in an insert-heavy workload.
+      # Correctness here never relies on repeatable reads; it relies on SELECT ... FOR UPDATE,
+      # unique constraints and conditional UPDATEs, all of which behave the same under RC.
+      transaction-isolation: TRANSACTION_READ_COMMITTED
   jpa:
     open-in-view: false            # no lazy loading in controllers; services own transactions
     hibernate:

@@ -1,5 +1,6 @@
 package com.atakan.blastscale.progression;
 
+import com.atakan.blastscale.common.TransactionRetry;
 import com.atakan.blastscale.common.idempotency.IdempotencyService;
 import com.atakan.blastscale.common.idempotency.IdempotentResponses;
 import com.atakan.blastscale.common.web.ApiHeaders;
@@ -37,7 +38,8 @@ public class ProgressionController {
     /** Consumes a life and returns the seed + rules of a new attempt. */
     @PostMapping("/levels/{levelId}/start")
     public LevelStartResponse start(@CurrentPlayer PlayerPrincipal principal, @PathVariable int levelId) {
-        return progressionService.startLevel(principal.playerId(), levelId);
+        // The whole transaction is re-run if InnoDB picks it as a deadlock victim.
+        return TransactionRetry.run("level-start", () -> progressionService.startLevel(principal.playerId(), levelId));
     }
 
     /**

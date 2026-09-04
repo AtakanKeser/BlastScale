@@ -1,5 +1,6 @@
 package com.atakan.blastscale.progression;
 
+import com.atakan.blastscale.common.TransactionRetry;
 import com.atakan.blastscale.common.exception.BlastScaleException;
 import com.atakan.blastscale.common.exception.ErrorCode;
 import com.atakan.blastscale.common.metrics.GameplayMetrics;
@@ -193,8 +194,8 @@ public class ProgressionService {
         }
 
         SimulationResult simulation = context.simulation();
-        LevelCompleteResponse response = transaction.execute(status ->
-                commitCompletion(playerId, level, session, simulation, request, now));
+        LevelCompleteResponse response = TransactionRetry.run("level-complete", () -> transaction.execute(status ->
+                commitCompletion(playerId, level, session, simulation, request, now)));
         metrics.rewardProcessing(Duration.ofNanos(System.nanoTime() - startedNanos));
         return response;
     }
