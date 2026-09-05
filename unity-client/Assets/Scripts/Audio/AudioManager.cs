@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -21,26 +22,56 @@ namespace BlastScale.Client.Audio
 
     /// <summary>
     /// Plays effects through a small pool of AudioSources (so overlapping pops never cut each
-    /// other off) and loops the generated ambient music. Music and effects can be muted from the
-    /// home screen; the choice is remembered in PlayerPrefs ("blastscale.music", "blastscale.sfx").
+    /// other off) and loops the ambient music. Music and effects can be muted from the home
+    /// screen; the choice is remembered in PlayerPrefs ("blastscale.music", "blastscale.sfx").
     /// A singleton created by the bootstrap; <see cref="Play(Sfx,float,float)"/> is safe to call
     /// before it exists (it simply does nothing).
+    ///
+    /// <para>Real music files are optional: when <c>Resources/Audio/music_main</c>,
+    /// <c>Resources/Audio/jingle_win</c> or <c>Resources/Audio/jingle_lose</c> exist they replace
+    /// the synthesised loop and jingles (see <see cref="MusicResource"/>); the UI and gameplay
+    /// effects stay synthesised. A file jingle ducks the music while it plays. Without the files
+    /// everything is generated at startup exactly as before.</para>
+    ///
+    /// <para>The music starts once at boot (login screen) and keeps looping through home, gameplay
+    /// and result; screens never restart it, and muting pauses instead of stopping so unmuting
+    /// resumes where it was.</para>
     /// </summary>
     public sealed class AudioManager : MonoBehaviour
     {
         public const string MusicPrefKey = "blastscale.music";
         public const string SfxPrefKey = "blastscale.sfx";
 
+        /// <summary>Resources paths (no extension) of the optional real music and jingles.</summary>
+        public const string MusicResource = "Audio/music_main";
+        public const string WinJingleResource = "Audio/jingle_win";
+        public const string LoseJingleResource = "Audio/jingle_lose";
+
         private const float MusicVolume = 0.35f;
+
+        /// <summary>A produced track is mixed louder than the thin synthesised pad.</summary>
+        private const float MusicFileVolume = 0.45f;
+
         private const float SfxVolume = 0.8f;
         private const int SfxSourceCount = 8;
+
+        /// <summary>While a file jingle plays the music drops to 40 % for two seconds, then eases back.</summary>
+        private const float DuckLevel = 0.4f;
+        private const float DuckSeconds = 2f;
+        private const float DuckFadeOutSeconds = 0.15f;
+        private const float DuckFadeInSeconds = 0.8f;
 
         private static AudioManager _instance;
 
         private readonly Dictionary<Sfx, AudioClip> _clips = new Dictionary<Sfx, AudioClip>();
+        private readonly HashSet<Sfx> _fileJingles = new HashSet<Sfx>();
         private readonly List<AudioSource> _sfxSources = new List<AudioSource>();
         private AudioSource _musicSource;
         private AudioClip _music;
+        private AudioClip _musicFile;
+        private float _musicBaseVolume = MusicVolume;
+        private bool _musicPaused;
+        private Coroutine _duckRoutine;
         private int _nextSource;
         private bool _musicEnabled;
         private bool _sfxEnabled;
@@ -98,15 +129,28 @@ namespace BlastScale.Client.Audio
             }
         }
 
-        /// <summary>Starts the ambient loop (respecting the mute preference); idempotent.</summary>
+        /// <summary>The clip the music source loops (null until <see cref="StartMusic"/> ran); tests check it never changes.</summary>
+        public AudioClip MusicClip => _music;
+
+        /// <summary>True when a real track from Resources/Audio replaced the synthesised loop.</summary>
+        public bool MusicIsFromFile => _musicFile != null;
+
+        /// <summary>True while the loop is audibly playing (false when muted or before StartMusic).</summary>
+        public bool IsMusicPlaying => _musicSource != null && _musicSource.isPlaying;
+
+        /// <summary>Playback position of the loop in seconds; keeps growing across screens when nothing restarts it.</summary>
+        public float MusicTime => _musicSource != null ? _musicSource.time : 0f;
+
+        /// <summary>Starts the ambient loop (respecting the mute preference); idempotent, never restarts a running loop.</summary>
         public void StartMusic()
         {
             if (_music == null)
             {
-                _music = SoundSynth.MusicLoop();
+                _music = _musicFile != null ? _musicFile : SoundSynth.MusicLoop();
+                _musicBaseVolume = _musicFile != null ? MusicFileVolume : MusicVolume;
                 _musicSource.clip = _music;
                 _musicSource.loop = true;
-                _musicSource.volume = MusicVolume;
+                _musicSource.volume = _musicBaseVolume;
             }
             ApplyMusicState();
         }
@@ -128,6 +172,7 @@ namespace BlastScale.Client.Audio
             _clips[Sfx.LoseSting] = SoundSynth.LoseSting();
             _clips[Sfx.ComboSwell] = SoundSynth.ComboSwell();
             _clips[Sfx.BoosterUse] = SoundSynth.BoosterUse();
+            LoadOptionalFiles();
 
             for (int i = 0; i < SfxSourceCount; i++)
             {
@@ -139,6 +184,32 @@ namespace BlastScale.Client.Audio
             _musicSource = gameObject.AddComponent<AudioSource>();
             _musicSource.playOnAwake = false;
             _musicSource.spatialBlend = 0f;
+        }
+
+        /// <summary>
+        /// Picks up real audio files dropped into Resources/Audio (any format Unity imports:
+        /// .ogg, .mp3, .wav). Each one silently replaces its synthesised counterpart; missing
+        /// files change nothing.
+        /// </summary>
+        private void LoadOptionalFiles()
+        {
+            _musicFile = Resources.Load<AudioClip>(MusicResource);
+            if (_musicFile != null)
+            {
+                Debug.Log("[audio] Using " + MusicResource + " as the music loop");
+            }
+            AudioClip win = Resources.Load<AudioClip>(WinJingleResource);
+            if (win != null)
+            {
+                _clips[Sfx.WinJingle] = win;
+                _fileJingles.Add(Sfx.WinJingle);
+            }
+            AudioClip lose = Resources.Load<AudioClip>(LoseJingleResource);
+            if (lose != null)
+            {
+                _clips[Sfx.LoseSting] = lose;
+                _fileJingles.Add(Sfx.LoseSting);
+            }
         }
 
         /// <summary>
@@ -173,8 +244,54 @@ namespace BlastScale.Client.Audio
             source.pitch = pitch;
             source.volume = SfxVolume * volume;
             source.Play();
+            if (_fileJingles.Contains(sfx))
+            {
+                DuckMusic();
+            }
         }
 
+        /// <summary>Lowers the music under a jingle and brings it back smoothly; a second jingle restarts the timer.</summary>
+        private void DuckMusic()
+        {
+            if (_musicSource == null || _music == null)
+            {
+                return;
+            }
+            if (_duckRoutine != null)
+            {
+                StopCoroutine(_duckRoutine);
+            }
+            _duckRoutine = StartCoroutine(Duck());
+        }
+
+        private IEnumerator Duck()
+        {
+            float start = _musicSource.volume;
+            float ducked = _musicBaseVolume * DuckLevel;
+            float t = 0f;
+            while (t < DuckFadeOutSeconds)
+            {
+                t += Time.unscaledDeltaTime;
+                _musicSource.volume = Mathf.Lerp(start, ducked, Mathf.Clamp01(t / DuckFadeOutSeconds));
+                yield return null;
+            }
+            _musicSource.volume = ducked;
+            yield return new WaitForSecondsRealtime(Mathf.Max(0f, DuckSeconds - DuckFadeOutSeconds));
+            t = 0f;
+            while (t < DuckFadeInSeconds)
+            {
+                t += Time.unscaledDeltaTime;
+                _musicSource.volume = Mathf.SmoothStep(ducked, _musicBaseVolume, Mathf.Clamp01(t / DuckFadeInSeconds));
+                yield return null;
+            }
+            _musicSource.volume = _musicBaseVolume;
+            _duckRoutine = null;
+        }
+
+        /// <summary>
+        /// Plays or pauses the loop to match the preference. Muting pauses (position kept) and
+        /// unmuting resumes with UnPause, so toggling music never restarts the track.
+        /// </summary>
         private void ApplyMusicState()
         {
             if (_musicSource == null || _music == null)
@@ -183,13 +300,19 @@ namespace BlastScale.Client.Audio
             }
             if (_musicEnabled)
             {
-                if (!_musicSource.isPlaying)
+                if (_musicPaused)
+                {
+                    _musicPaused = false;
+                    _musicSource.UnPause();
+                }
+                else if (!_musicSource.isPlaying)
                 {
                     _musicSource.Play();
                 }
             }
             else if (_musicSource.isPlaying)
             {
+                _musicPaused = true;
                 _musicSource.Pause();
             }
         }
