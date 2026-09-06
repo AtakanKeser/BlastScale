@@ -31,8 +31,21 @@ docker compose up --build
 | Prometheus | http://localhost:9090 |
 | Health probes | http://localhost:8080/actuator/health/readiness, `/liveness` |
 
+## Try the game in two minutes
+
+| You have | Do this |
+|----------|---------|
+| Nothing but Unity 6 (6000.3) | open `unity-client`, press Play, tap **Offline demo** — the full game runs on this device with the same engine and levels, no server |
+| Docker | `docker compose up --build`, then **Play as guest** in the client (server URL `http://localhost:8080`) |
+| An iPhone | see [Playing on an iPhone](#playing-on-an-iphone); the build script bakes this Mac's address into the app |
+
+The login screen checks the server for you: a green pill means "connected", an amber one tells
+you the URL it could not reach and what to do about it, and the **?** button explains the three
+paths above inside the game.
+
 ## Contents
 
+- [Try the game in two minutes](#try-the-game-in-two-minutes)
 - [Architecture](#architecture)
 - [Engineering concerns and where they live](#engineering-concerns-and-where-they-live)
 - [Quick start](#quick-start)
@@ -503,8 +516,9 @@ Raw k6 summaries are written to `load-test/results/` by every run.
 - **Unity client** (`unity-client/`): a polished portrait mobile game — login, home (level, lives
   with countdown, coins, stars, daily reward), animated gameplay grid (pop/fall/spawn tweens,
   particles, combo banners, star reveals), result screen with confetti and reward breakdown, shop,
-  leaderboard and events, all talking to the real API; procedurally synthesized sound effects and
-  music, and an offline demo mode that plays the same engine without a server. The client runs the
+  leaderboard and events, all talking to the real API; procedurally synthesized sound effects,
+  a soundtrack rendered from real instruments (see below), haptic feedback on phones, and an
+  offline demo mode that plays the same engine without a server. The client runs the
   C# port of the engine for rendering only; the server decides the outcome by replaying the moves.
   Builds and installs on an iPhone with one script (see [Playing on an iPhone](#playing-on-an-iphone)).
   See [unity-client/README.md](unity-client/README.md).
@@ -534,6 +548,15 @@ Development builds allow plain HTTP for that reason (`InsecureHttpOption.AlwaysA
 `IosBuild.cs`); a store build would use HTTPS. Apps signed with a free personal team expire after
 seven days — just run the script again.
 
+## Music
+
+The in-game loop and the win/lose jingles are composed as MIDI in `tools/music/compose.py` and
+rendered with FluidSynth through [GeneralUser GS](https://github.com/mrbumpy409/GeneralUser-GS),
+a free General MIDI SoundFont (licence in `tools/music/`). Marimba, electric piano, bass,
+glockenspiel, pad and drums; 120 BPM, C major, a 32-second loop cut sample-accurately from the
+middle of three identical passes so it has no seam. `tools/music/render.sh` regenerates the files
+in `unity-client/Assets/Resources/Audio/` — see [tools/music/README.md](tools/music/README.md).
+
 ## Repository layout
 
 ```
@@ -541,6 +564,7 @@ backend/        Spring Boot modular monolith (Java 21, Maven wrapper, Flyway mig
 admin-panel/    React + TypeScript LiveOps console
 unity-client/   Unity 6 project (C# engine port + UGUI screens)
 load-test/      k6 scenarios + JavaScript engine port + parity check
+tools/music/    MIDI composition + SoundFont rendering pipeline for the soundtrack
 infra/          nginx, Prometheus, Grafana provisioning and dashboard generator
 docs/adr/       architecture decision records
 docs/engine/    golden engine vectors shared by all three engine implementations
