@@ -7,6 +7,31 @@ hand, is meant to feel like a premium casual mobile puzzle: procedural art, a sm
 particles and synthesised sound on every interaction — still with no prefabs, sprites or audio
 files in the repository.
 
+## Try it in two minutes
+
+Three ways to see the game running, from zero setup to a real phone:
+
+1. **Offline demo — nothing needed.** Open `unity-client` in Unity 6000.3.10f1 (the editor opens
+   `Assets/Scenes/Main.unity` by itself on a fresh clone, or use *BlastScale > Open Main Scene*),
+   press Play and tap **Offline demo**. Levels, coins, lives and the leaderboard are simulated on the
+   device by the same engine the server uses; nothing is sent anywhere.
+2. **Same machine — the real backend.** Run `docker compose up` in the repository root, keep the
+   server URL at `http://localhost:8080` and tap **Play as guest** (or register an account). The
+   connection status pill under the URL field tells you when the server is up: it turns green
+   ("Connected · localhost:8080") as soon as `GET /actuator/health/liveness` answers, and amber
+   ("No server at localhost:8080", with a *Retry* button) while it does not.
+3. **Phone on the same Wi-Fi.** Type the computer's IP into the URL field (`192.168.1.20:8080`
+   works, the scheme is added for you), watch the pill turn green, then play as guest. Building and
+   installing on an iPhone is described in the root README ("Playing on an iPhone").
+
+The **?** button on the login screen shows the same three paths inside the game. Mistakes are
+explained where they happen: an unreachable server opens a dialog with *Offline demo* / *Retry*,
+form problems appear in red next to the field (Register stays disabled until the username is 3–32
+letters, digits or `_` and the password 8–72 characters), and the server's `USERNAME_TAKEN`,
+`INVALID_CREDENTIALS`, `VALIDATION_ERROR` and `RATE_LIMITED` codes are turned into plain
+sentences. *BlastScale > Reset local save* in the editor menu wipes the offline progress and every
+stored preference (server URL, toggles, remembered username) when you want a clean run.
+
 ## Opening the project
 
 * Unity **6000.3.10f1** (Unity 6). Open the `unity-client` folder with the Unity Hub / Editor;
@@ -23,6 +48,9 @@ files in the repository.
     -projectPath unity-client -executeMethod BlastScale.EditorTools.SceneBuilder.BuildMainScene -logFile /tmp/unity-compile.log
   ```
 
+* `Assets/Scripts/Editor/EditorOnboarding.cs` opens `Main.unity` automatically when the editor starts on an
+  empty untitled scene (a fresh clone) and checks that the scene is in the build settings; the *BlastScale*
+  menu also has *Open Main Scene* and *Reset local save*.
 * Press Play in `Main.unity`. The whole UI (canvas, screens, board) is built from code at runtime with
   UGUI — no prefabs, no TextMeshPro. Textures (rounded cards, shadows, blocks, icons) are generated with
   `Texture2D` at startup and cached; sounds are synthesised into `AudioClip`s. The only binary assets are
@@ -33,13 +61,23 @@ files in the repository.
 The base URL is resolved in this order (`Assets/Scripts/Net/ClientConfig.cs`):
 
 1. the value typed into the *Server URL* field of the login screen, stored in `PlayerPrefs`
-   (`blastscale.baseUrl`) — clear the field (or enter the default) to forget it;
+   (`blastscale.baseUrl`) — clear the field (or enter the default) to forget it. Input is normalised:
+   whitespace and trailing slashes are dropped and `host:port` without a scheme becomes `http://host:port`;
 2. `Assets/Resources/server-config.json` with `{"baseUrl": "https://..."}` — optional, meant to be
    generated at build time for device builds (it is not part of the repository);
 3. `http://localhost:8080`.
 
 All endpoints live under `/api/v1` (`Assets/Scripts/Net/ApiRoutes.cs`). Start the backend with
-`docker compose up --build` in the repository root (see the root README).
+`docker compose up --build` in the repository root (see the root README). The login screen probes
+`{baseUrl}/actuator/health/liveness` (`Assets/Scripts/Core/ServerHealth.cs`, 3 s timeout, no token)
+when it opens and ~600 ms after the URL field changes, and shows the result in the status pill.
+
+One Unity rule to know: with *Player Settings > Other Settings > Allow downloads over HTTP* at its
+default "Not allowed", `UnityWebRequest` refuses plain `http://` to any host except localhost before
+sending anything. The pill shows "http to <host> is blocked by Unity" in that case (and `ApiClient`
+turns the refusal into a readable error instead of a dead coroutine). `build-ios.sh` sets the option
+to "Always allowed" for the phone build; set it yourself to reach a server on another machine from
+the editor, or use https.
 
 ## Offline demo
 
@@ -118,6 +156,15 @@ toasts. A dropped connection is retried once with the **same** `Idempotency-Key`
   particle system (bursts, sparkles, confetti, flying coins, score popups); `BokehBackground` draws the
   gradient with drifting bokeh discs; `ScreenManager` slides or fades between screens; `ButtonJuice`
   gives every button the press/release animation, the click sound and the disabled look.
+* **Haptics** (`Assets/Scripts/Core/Haptics.cs`) — on iOS the Taptic Engine through the native plugin
+  `Assets/Plugins/iOS/BlastScaleHaptics.mm` (prepared `UIImpactFeedbackGenerator`s for light / medium /
+  heavy / soft / rigid, a notification generator and a selection generator, iOS 13+); on Android
+  `android.os.Vibrator` with amplitude-controlled one-shots (API 26+, plain `vibrate(ms)` below — the
+  build needs the `VIBRATE` permission); a no-op in the editor. Button presses tick, block pops thump
+  light / medium / heavy by group size (< 5, 5–7, 8+), invalid taps buzz, stars and the target-reached
+  moment, wins, losses, daily rewards, purchases and booster use each have their own pattern. Events are
+  throttled to ~25 per second and coin ticks are coalesced. The home screen has a haptics toggle next to
+  the music and sound ones (`blastscale.haptics`).
 * **Board** (`Assets/Scripts/UI/Board`) — `BoardView` lays the blocks out itself and animates pops,
   gravity, refills and shuffles from engine snapshots; `BlockView` is one pooled block.
 
@@ -129,6 +176,13 @@ win jingle, lose sting, combo swell, booster sound, and a 16 second ambient loop
 I–vi–IV–V with an arpeggio). `AudioManager` plays effects through a pool of `AudioSource`s (music
 0.35, effects 0.8). The home screen has a music toggle and a sound toggle; the choices are stored in
 `PlayerPrefs` (`blastscale.music`, `blastscale.sfx`).
+
+Real music is optional: drop `music_main`, `jingle_win` and/or `jingle_lose` (`.ogg`, `.mp3` or `.wav`) into
+`Assets/Resources/Audio/` and `AudioManager` uses them instead of the synthesised loop (played at 0.45)
+and jingles; the UI and gameplay effects stay synthesised. While a file jingle plays the music ducks to
+40 % for two seconds and eases back. The loop starts once at boot and keeps playing through home,
+gameplay and result; muting pauses it and unmuting resumes at the same position. Without the files the
+behaviour is unchanged.
 
 ## Fonts and licenses
 
@@ -169,14 +223,17 @@ Assets/Fonts/               Fredoka One + Poppins (Resources/) and their OFL lic
 Assets/Scripts/Engine/      pure C# engine port (asmdef BlastScale.Engine, no UnityEngine)
 Assets/Scripts/Net/         IApiClient, ApiClient (UnityWebRequest + Newtonsoft), ApiRoutes, ClientConfig, Dto/*
 Assets/Scripts/Net/Offline/ OfflineApiClient, OfflineLevelGenerator, OfflineSave (the offline demo)
-Assets/Scripts/Core/        GameState, LevelSession, GameFlow, AppContext, GameBootstrap (the scene's only component)
+Assets/Scripts/Core/        GameState, LevelSession, GameFlow, AppContext, GameBootstrap (the scene's only component),
+                            ServerHealth (liveness probe), Haptics (iOS/Android feedback wrapper)
+Assets/Plugins/iOS/         BlastScaleHaptics.mm (UIKit feedback generators, compiled by Xcode)
 Assets/Scripts/Audio/       SoundSynth (procedural clips), AudioManager
 Assets/Scripts/UI/          UiFactory, UiTheme, UiFonts, UiScreen, ScreenManager, Toast, ModalDialog, LoadingOverlay,
                             ButtonJuice, SafeAreaFitter, Screens/*, Board/* (BoardView), Fx/* (Tween, particles, bokeh),
                             Gfx/* (SpriteFactory, IconFactory, BlockSprites)
-Assets/Scripts/Editor/      SceneBuilder (generates Main.unity)
-Assets/Tests/Editor/        EngineVectorTests + engine-vectors.json (parity with the Java engine)
-Assets/Tests/PlayMode/      SceneSmokeTests (boot + full offline level), UiScreenshotTests, TestDriver
+Assets/Scripts/Editor/      SceneBuilder (generates Main.unity), EditorOnboarding (opens it, menu items), IosBuild
+Assets/Tests/Editor/        EngineVectorTests + engine-vectors.json (parity with the Java engine), OnboardingLogicTests
+Assets/Tests/PlayMode/      SceneSmokeTests (boot + full offline level), UiScreenshotTests, OnboardingScreenshotTests,
+                            GameplayVideoTests (recorder), TestDriver
 ```
 
 ## Tests
@@ -192,8 +249,15 @@ match the Java engine, plus the RNG reference sequence. Run them from *Window > 
   -runTests -testPlatform EditMode -projectPath unity-client -testResults /tmp/unity-tests.xml -logFile /tmp/unity-tests.log
 ```
 
-The PlayMode tests (`-testPlatform PlayMode`) boot `Main.unity`, check the login screen, then play a
-whole level through the offline demo (login → home → gameplay with animated taps → result → home).
+`OnboardingLogicTests.cs` covers the URL normalisation, the form rules and the error-code copy of the
+login screen.
+
+The PlayMode tests (`-testPlatform PlayMode`) boot `Main.unity`, check the login screen (including the
+connection status pill and the help button), then play a whole level through the offline demo
+(login → home → gameplay with animated taps → result → home) and verify the music loop is never
+restarted. `OnboardingScreenshotTests` renders the login screen with the pill in both states (the
+configured server, then `http://localhost:9`), the "could not reach the server" dialog, the inline
+validation, the help dialog and the home toggles into `/tmp/blastscale-onboarding/*.png`.
 `UiScreenshotTests` additionally renders the login, home, gameplay, result, shop, leaderboard and
 events screens into `/tmp/blastscale-shots/*.png` at 1080x1920 by pointing the UI camera at a render
 texture; run it **without** `-nographics` so the editor can render:

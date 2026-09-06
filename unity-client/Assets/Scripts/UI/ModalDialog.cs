@@ -55,6 +55,16 @@ namespace BlastScale.Client.UI
 
         public void Show(string title, string message, params ModalButton[] buttons)
         {
+            Show(title, message, TextAnchor.MiddleCenter, buttons);
+        }
+
+        /// <summary>
+        /// Same as <see cref="Show(string,string,ModalButton[])"/> with control over the message
+        /// alignment: explanatory text with several paragraphs (the "how to test" help) reads
+        /// better left-aligned, short questions stay centred.
+        /// </summary>
+        public void Show(string title, string message, TextAnchor messageAlignment, params ModalButton[] buttons)
+        {
             Close();
             Image scrim = UiFactory.CreatePanel(_layer, "Modal", UiTheme.Scrim, true);
             UiFactory.Stretch(scrim.rectTransform);
@@ -74,7 +84,7 @@ namespace BlastScale.Client.UI
             UiFactory.CreateTitle(card, title, UiTheme.HeadingSize, UiTheme.Text);
             if (!string.IsNullOrEmpty(message))
             {
-                UiFactory.CreateLabel(card, message, UiTheme.BodySize - 2, UiTheme.TextSoft);
+                UiFactory.CreateLabel(card, message, UiTheme.BodySize - 2, UiTheme.TextSoft, messageAlignment);
             }
             UiFactory.CreateGap(card, 6f);
             foreach (ModalButton button in buttons)

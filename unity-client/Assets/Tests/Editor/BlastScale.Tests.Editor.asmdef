@@ -2,6 +2,7 @@
     "name": "BlastScale.Tests.Editor",
     "rootNamespace": "BlastScale.Tests",
     "references": [
+        "BlastScale.Client",
         "BlastScale.Engine",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"

@@ -11,6 +11,8 @@ namespace BlastScale.Client.Net
     ///         at build time for device builds — the file is optional and not part of the repository;</item>
     ///   <item><see cref="FallbackBaseUrl"/> for a locally running backend.</item>
     /// </list>
+    /// Whatever the player types is normalised by <see cref="NormalizeUrl"/>, so "192.168.1.20:8080"
+    /// or "localhost:8080/" work just as well as a full URL.
     /// </summary>
     public static class ClientConfig
     {
@@ -45,17 +47,21 @@ namespace BlastScale.Client.Net
             }
         }
 
-        /// <summary>Base URL without a trailing slash; the PlayerPrefs override wins over the default.</summary>
+        /// <summary>
+        /// Base URL without a trailing slash; the PlayerPrefs override wins over the default.
+        /// Assigning an empty (or default) value forgets the override and restores the default.
+        /// </summary>
         public static string BaseUrl
         {
             get
             {
                 string stored = PlayerPrefs.GetString(BaseUrlPrefKey, DefaultBaseUrl);
-                return Normalize(string.IsNullOrWhiteSpace(stored) ? DefaultBaseUrl : stored);
+                string normalized = NormalizeUrl(stored);
+                return string.IsNullOrEmpty(normalized) ? DefaultBaseUrl : normalized;
             }
             set
             {
-                string normalized = Normalize(value);
+                string normalized = NormalizeUrl(value);
                 if (string.IsNullOrEmpty(normalized) || normalized == DefaultBaseUrl)
                 {
                     PlayerPrefs.DeleteKey(BaseUrlPrefKey);
@@ -67,6 +73,9 @@ namespace BlastScale.Client.Net
                 PlayerPrefs.Save();
             }
         }
+
+        /// <summary>True when the player typed a URL that differs from the build's default.</summary>
+        public static bool HasOverride => PlayerPrefs.HasKey(BaseUrlPrefKey);
 
         /// <summary>Reads Resources/server-config.json; null when the file is absent or has no usable baseUrl.</summary>
         private static string ReadResourceBaseUrl()
@@ -80,7 +89,7 @@ namespace BlastScale.Client.Net
             {
                 JObject json = JObject.Parse(asset.text);
                 string url = json.Value<string>("baseUrl");
-                string normalized = Normalize(url);
+                string normalized = NormalizeUrl(url);
                 if (string.IsNullOrEmpty(normalized))
                 {
                     return null;
@@ -95,10 +104,42 @@ namespace BlastScale.Client.Net
             }
         }
 
-        /// <summary>Trims whitespace and trailing slashes so path concatenation is always "base + /api/v1/...".</summary>
-        private static string Normalize(string url)
+        /// <summary>
+        /// Turns whatever a person typed into a usable base URL: whitespace is trimmed, trailing
+        /// slashes are removed (paths are appended as "base + /api/v1/..."), and a bare
+        /// "host", "host:port" or "host/path" gets "http://" in front because that is what a
+        /// laptop on the same Wi-Fi serves. Empty input stays empty so callers can restore the
+        /// default. The scheme itself is kept as typed (https stays https).
+        /// </summary>
+        public static string NormalizeUrl(string url)
         {
-            return url == null ? "" : url.Trim().TrimEnd('/');
+            if (url == null)
+            {
+                return "";
+            }
+            string trimmed = url.Trim();
+            if (trimmed.Length == 0)
+            {
+                return "";
+            }
+            int schemeEnd = trimmed.IndexOf("://", System.StringComparison.Ordinal);
+            string scheme = schemeEnd < 0 ? "http" : trimmed.Substring(0, schemeEnd);
+            string rest = schemeEnd < 0 ? trimmed : trimmed.Substring(schemeEnd + 3);
+            rest = rest.Trim('/');
+            // "http://" or "///" alone is not a server; treat it like empty input.
+            return rest.Length == 0 || scheme.Length == 0 ? "" : scheme + "://" + rest;
+        }
+
+        /// <summary>"localhost:8080" for "http://localhost:8080/": the short form used in status messages.</summary>
+        public static string DisplayHost(string url)
+        {
+            string normalized = NormalizeUrl(url);
+            if (normalized.Length == 0)
+            {
+                return "";
+            }
+            int schemeEnd = normalized.IndexOf("://", System.StringComparison.Ordinal);
+            return schemeEnd >= 0 ? normalized.Substring(schemeEnd + 3) : normalized;
         }
     }
 }

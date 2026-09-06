@@ -1,8 +1,11 @@
+using System;
 using System.Collections;
+using System.Collections.Generic;
 using BlastScale.Client.Net;
 using BlastScale.Client.Net.Dto;
 using BlastScale.Client.UI;
 using BlastScale.Client.UI.Screens;
+using Newtonsoft.Json.Linq;
 using UnityEngine;
 
 namespace BlastScale.Client.Core
@@ -22,6 +25,9 @@ namespace BlastScale.Client.Core
         /// </summary>
         public const float MinSecondsPerTap = 0.15f;
 
+        /// <summary>PlayerPrefs key of the last username that signed in successfully (pre-filled on the login screen).</summary>
+        public const string LastUsernameKey = "blastscale.lastUsername";
+
         private readonly AppContext _app;
 
         public GameFlow(AppContext app)
@@ -37,20 +43,39 @@ namespace BlastScale.Client.Core
 
         // ------------------------------------------------------------------ authentication
 
-        public IEnumerator LoginAsGuest()
+        /// <summary>
+        /// Guest sign-in with the device id. <paramref name="onFailure"/> (optional) lets the login
+        /// screen react to a failure (e.g. re-check the server status); the user-facing message is
+        /// shown here in every case.
+        /// </summary>
+        public IEnumerator LoginAsGuest(Action<ApiException> onFailure = null)
         {
             var request = new GuestLoginRequest { deviceId = DeviceIdentity.Get() };
-            yield return Authenticate(ApiRoutes.AuthGuest, request);
+            yield return Authenticate(ApiRoutes.AuthGuest, request, onFailure);
         }
 
-        public IEnumerator Login(string username, string password)
+        public IEnumerator Login(string username, string password, Action<ApiException> onFailure = null)
         {
-            yield return Authenticate(ApiRoutes.AuthLogin, new LoginRequest { username = username, password = password });
+            yield return Authenticate(ApiRoutes.AuthLogin, new LoginRequest { username = username, password = password }, onFailure, username);
         }
 
-        public IEnumerator Register(string username, string password)
+        public IEnumerator Register(string username, string password, Action<ApiException> onFailure = null)
         {
-            yield return Authenticate(ApiRoutes.AuthRegister, new RegisterRequest { username = username, password = password });
+            yield return Authenticate(ApiRoutes.AuthRegister, new RegisterRequest { username = username, password = password }, onFailure, username);
+        }
+
+        /// <summary>
+        /// After a successful sign-in the username is kept so the next launch pre-fills it. This
+        /// runs inside the authentication flow (before the home screen replaces the login screen)
+        /// because a screen-guarded coroutine stops as soon as its screen is dismissed.
+        /// </summary>
+        private static void RememberUsername(string username)
+        {
+            if (!string.IsNullOrEmpty(username))
+            {
+                PlayerPrefs.SetString(LastUsernameKey, username);
+                PlayerPrefs.Save();
+            }
         }
 
         /// <summary>
@@ -65,23 +90,131 @@ namespace BlastScale.Client.Core
             yield return LoginAsGuest();
         }
 
-        /// <summary>Exchanges credentials for a token, loads config + profile, then shows the home screen.</summary>
-        private IEnumerator Authenticate<TRequest>(string path, TRequest request)
+        /// <summary>
+        /// Exchanges credentials for a token, loads config + profile, then shows the home screen.
+        /// <paramref name="usernameToRemember"/> is stored once the server accepted the credentials.
+        /// </summary>
+        private IEnumerator Authenticate<TRequest>(string path, TRequest request, Action<ApiException> onFailure, string usernameToRemember = null)
         {
             var auth = new ApiResult<AuthResponse>();
             yield return Api.PostJson(path, request, auth);
             if (!auth.Ok)
             {
-                ShowError(auth.Error);
+                // "Retry" in the dialog repeats exactly this attempt (same route, same request).
+                ShowAuthError(auth.Error, () => _app.Runner.StartCoroutine(Authenticate(path, request, onFailure, usernameToRemember)));
+                onFailure?.Invoke(auth.Error);
                 yield break;
             }
             State.SetAuth(auth.Value);
+            RememberUsername(usernameToRemember);
             yield return LoadStartupData();
             if (!State.IsAuthenticated)
             {
                 yield break; // the token was rejected while loading; the login screen is already back
             }
             _app.Screens.Show(new HomeScreen());
+        }
+
+        // ------------------------------------------------------------------ sign-in errors
+
+        /// <summary>
+        /// True for every failure that means "nothing usable answered at that URL": no connection,
+        /// timeout, a 5xx, a body we could not parse, or a non-JSON answer from something that is
+        /// not a BlastScale server (a synthetic HTTP_xxx code).
+        /// </summary>
+        public static bool IsServerUnreachable(ApiException error)
+        {
+            if (error == null) return false;
+            return error.IsNetworkError
+                   || error.HttpStatus >= 500
+                   || error.Code == ApiException.ParseErrorCode
+                   || error.Code.StartsWith("HTTP_", StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// Short, friendly copy for the sign-in error codes; null when the server's own message is
+        /// the best thing to show.
+        /// </summary>
+        public static string FriendlyAuthMessage(ApiException error)
+        {
+            if (error == null) return null;
+            switch (error.Code)
+            {
+                case "USERNAME_TAKEN":
+                    return "That username is already taken. Pick another one, or sign in if it is yours.";
+                case "INVALID_CREDENTIALS":
+                    return "Wrong username or password.";
+                case "VALIDATION_ERROR":
+                {
+                    Dictionary<string, string> fields = FieldMessages(error);
+                    if (fields.Count == 0) return "Please check what you entered.";
+                    var parts = new List<string>();
+                    foreach (KeyValuePair<string, string> field in fields)
+                    {
+                        parts.Add(Capitalize(field.Key) + ": " + field.Value);
+                    }
+                    return string.Join("\n", parts);
+                }
+                case "RATE_LIMITED":
+                {
+                    long limit = error.DetailLong("limitPerMinute", 0);
+                    return limit > 0
+                        ? "Too many attempts (limit " + limit + " per minute). Wait a moment and try again."
+                        : "Too many attempts. Wait a moment and try again.";
+                }
+                default:
+                    return null;
+            }
+        }
+
+        /// <summary>
+        /// The per-field messages of a VALIDATION_ERROR (<c>details</c> is a flat "field -> message"
+        /// map, e.g. <c>{"username": "size must be between 3 and 32"}</c>); empty for other codes.
+        /// </summary>
+        public static Dictionary<string, string> FieldMessages(ApiException error)
+        {
+            var result = new Dictionary<string, string>();
+            if (error == null || error.Code != "VALIDATION_ERROR") return result;
+            foreach (KeyValuePair<string, JToken> detail in error.Details)
+            {
+                if (detail.Value == null || detail.Value.Type == JTokenType.Null) continue;
+                result[detail.Key] = detail.Value.Type == JTokenType.String ? detail.Value.Value<string>() : detail.Value.ToString();
+            }
+            return result;
+        }
+
+        private static string Capitalize(string text)
+        {
+            return string.IsNullOrEmpty(text) ? text : char.ToUpperInvariant(text[0]) + text.Substring(1);
+        }
+
+        /// <summary>
+        /// Presents a failed sign-in attempt: an unreachable server becomes a dialog that offers the
+        /// offline demo or a retry; the business codes become friendly toasts.
+        /// </summary>
+        private void ShowAuthError(ApiException error, Action retry)
+        {
+            if (error == null) return;
+            if (IsServerUnreachable(error))
+            {
+                string url = ClientConfig.BaseUrl;
+                string detail = error.IsNetworkError
+                    ? "Nothing answered there."
+                    : "The answer was not from a BlastScale server (" + error.Message + ").";
+                _app.Modal.Show("Could not reach the server at " + url,
+                    detail + "\n\nStart the backend with <b>docker compose up</b> in the repository and check the URL, " +
+                    "or play the offline demo — it needs no server at all.",
+                    ModalButton.Primary("Offline demo", () => _app.Runner.StartCoroutine(StartOfflineDemo())),
+                    ModalButton.Secondary("Retry", retry));
+                return;
+            }
+            string friendly = FriendlyAuthMessage(error);
+            if (friendly != null)
+            {
+                _app.Toast.Show(friendly, true, error.Code == "VALIDATION_ERROR" ? 5f : 3.5f);
+                return;
+            }
+            ShowError(error);
         }
 
         /// <summary>Remote config first (prices, lives), then the profile (wallet, level).</summary>

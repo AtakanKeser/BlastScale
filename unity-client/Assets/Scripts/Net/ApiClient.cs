@@ -106,7 +106,22 @@ namespace BlastScale.Client.Net
                 {
                     using (UnityWebRequest request = Build(method, url, jsonBody, idempotencyKey))
                     {
-                        yield return request.SendWebRequest();
+                        UnityWebRequestAsyncOperation sending;
+                        try
+                        {
+                            sending = request.SendWebRequest();
+                        }
+                        catch (InvalidOperationException e)
+                        {
+                            // Unity refuses plain http to non-localhost hosts unless Player Settings >
+                            // "Allow downloads over HTTP" is "Always allowed". Without this catch the
+                            // exception would end the coroutine and the caller would wait forever.
+                            result.Error = new ApiException(ApiException.NetworkErrorCode,
+                                "Unity blocked the request (" + e.Message + "). Use https, or set Player Settings > " +
+                                "Allow downloads over HTTP to \"Always allowed\" for a plain-http server.", 0, path, null);
+                            yield break;
+                        }
+                        yield return sending;
 
                         if (request.result == UnityWebRequest.Result.ConnectionError ||
                             request.result == UnityWebRequest.Result.DataProcessingError)

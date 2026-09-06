@@ -285,6 +285,43 @@ namespace BlastScale.Client.UI.Gfx
             });
         }
 
+        /// <summary>
+        /// Haptics toggle: a phone outline with two curved "vibration" lines on each side. Drawn
+        /// white so the button tints it like the other toggles.
+        /// </summary>
+        public static Sprite Vibration()
+        {
+            return Raster("icon_vibration", (x, y) =>
+            {
+                // Phone body: a rounded rectangle outline (0.11 thick) with a small earpiece slit at the top.
+                float outer = SpriteFactory.RoundedBoxDistance(x, y, 0.30f, 0.62f, 0.12f);
+                if (outer <= 0f && outer > -0.11f) return Color.white;
+                if (outer <= -0.11f && Mathf.Abs(x) < 0.10f && Mathf.Abs(y - 0.46f) < 0.035f) return Color.white;
+                // Vibration arcs: two rings around the centre, only their left/right thirds are kept.
+                float r = Mathf.Sqrt(x * x + y * y);
+                bool arc = (Mathf.Abs(r - 0.62f) < 0.055f || Mathf.Abs(r - 0.84f) < 0.055f) && Mathf.Abs(y) < r * 0.5f && Mathf.Abs(x) > 0.42f;
+                return arc ? Color.white : Color.clear;
+            });
+        }
+
+        /// <summary>Help button: a question mark (hook, stem and dot), white for tinting.</summary>
+        public static Sprite Question()
+        {
+            return Raster("icon_question", (x, y) =>
+            {
+                // Hook: a ring centred above the middle, minus its lower-left quarter.
+                float cx = x, cy = y - 0.33f;
+                float r = Mathf.Sqrt(cx * cx + cy * cy);
+                bool ring = r > 0.26f && r < 0.44f && !(cx < 0f && cy < 0.02f);
+                // Stem from the bottom of the ring down to the dot.
+                bool stem = Mathf.Abs(x) < 0.09f && y <= -0.06f && y > -0.42f;
+                // Dot.
+                float dx = x, dy = y + 0.68f;
+                bool dot = dx * dx + dy * dy < 0.13f * 0.13f;
+                return ring || stem || dot ? Color.white : Color.clear;
+            });
+        }
+
         /// <summary>A diagonal bar drawn over a toggle icon to show "off".</summary>
         public static Sprite Slash()
         {
