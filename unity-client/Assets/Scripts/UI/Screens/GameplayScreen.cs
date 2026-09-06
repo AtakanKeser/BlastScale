@@ -280,6 +280,7 @@ namespace BlastScale.Client.UI.Screens
                     Tween.Delay(i * 0.1f, () =>
                     {
                         AudioManager.Play(Sfx.StarChime, 1f + captured * 0.12f);
+                        Haptics.Impact(HapticImpact.Medium);
                         if (UiParticles.Instance != null) UiParticles.Instance.Sparkle(star.transform.position, UiTheme.Gold, 10, 40f);
                     }, star);
                 }
@@ -303,6 +304,7 @@ namespace BlastScale.Client.UI.Screens
                     Tween.Fade(_finishGroup, 1f, 0.2f);
                     Tween.ScaleFrom(_finishButton.transform, 0f, 0.5f, Ease.OutBack, 0f, () => Tween.Pulse(_finishButton.transform, 0.04f, 1.1f));
                     AudioManager.Play(Sfx.ComboSwell, 1.15f, 0.7f);
+                    Haptics.Notify(HapticNotification.Success);
                 }
                 else
                 {
@@ -406,6 +408,7 @@ namespace BlastScale.Client.UI.Screens
             {
                 _board.ShakeBlock(row, col);
                 AudioManager.Play(Sfx.Invalid, 1f, 0.7f);
+                Haptics.Notify(HapticNotification.Error);
                 return;
             }
             int colorIndex = _session.Board.Cell(row, col);
@@ -422,6 +425,8 @@ namespace BlastScale.Client.UI.Screens
             int gained = _session.Score - scoreBefore;
             _busy = true;
             AudioManager.PlayPop(group.Count);
+            // The thump grows with the group, in step with the banner thresholds.
+            Haptics.Impact(group.Count >= 8 ? HapticImpact.Heavy : group.Count >= 5 ? HapticImpact.Medium : HapticImpact.Light);
             Vector3 centre = _board.GroupCentre(group);
             if (App.Fx != null)
             {
@@ -462,6 +467,7 @@ namespace BlastScale.Client.UI.Screens
             _busy = true;
             AudioManager.Play(Sfx.BoosterUse);
             AudioManager.Play(Sfx.Pop, 0.8f);
+            Haptics.Impact(HapticImpact.Rigid);
             var group = new List<CellPos> { new CellPos(row, col) };
             _board.AnimatePop(group, before, after, () =>
             {
@@ -505,6 +511,7 @@ namespace BlastScale.Client.UI.Screens
             _busy = true;
             AudioManager.Play(Sfx.BoosterUse);
             AudioManager.Play(Sfx.Whoosh, 1.2f, 0.6f);
+            Haptics.Impact(HapticImpact.Rigid);
             _board.AnimateShuffle(_session.Board.Snapshot(), () =>
             {
                 _busy = false;
@@ -529,6 +536,7 @@ namespace BlastScale.Client.UI.Screens
             }
             _session.ActivateExtraMoves();
             AudioManager.Play(Sfx.BoosterUse, 1.1f);
+            Haptics.Impact(HapticImpact.Rigid);
             App.Toast.Show("+5 moves added");
             RefreshHud();
             Tween.Punch(_movesPill, 0.3f, 0.5f);
@@ -584,6 +592,7 @@ namespace BlastScale.Client.UI.Screens
                     {
                         _session.ActivateExtraMoves();
                         AudioManager.Play(Sfx.BoosterUse, 1.1f);
+                        Haptics.Impact(HapticImpact.Rigid);
                         RefreshHud();
                         Tween.Punch(_movesPill, 0.3f, 0.5f);
                     }),
@@ -647,6 +656,12 @@ namespace BlastScale.Client.UI.Screens
                 App.Modal.Show("Level rejected by the server", error.Message + "\n(" + error.Code + ")",
                     ModalButton.Primary("Home", () => App.Flow.GoHome()));
             }
+        }
+
+        /// <summary>Warms the haptic generators up so the very first pop is felt without latency.</summary>
+        protected override void OnShown()
+        {
+            Haptics.Prepare();
         }
 
         protected override void OnDismissed()

@@ -188,6 +188,9 @@ namespace BlastScale.Client.UI.Screens
         {
             Tween.ScaleFrom(_card, 0.7f, 0.5f, Ease.OutBack);
             AudioManager.Play(Sfx.WinJingle);
+            // Success thump first, then three light taps in time with the confetti bursting out.
+            Haptics.Notify(HapticNotification.Success);
+            Haptics.Play(App.Runner, new[] { (0.25f, HapticImpact.Light), (0.12f, HapticImpact.Light), (0.12f, HapticImpact.Light) });
             if (App.Fx != null)
             {
                 App.Fx.Confetti(90, 2.6f);
@@ -219,6 +222,7 @@ namespace BlastScale.Client.UI.Screens
                     {
                         lastTick = elapsed;
                         AudioManager.Play(Sfx.CoinTick, 0.9f + t * 0.4f, 0.6f);
+                        Haptics.CoinTick(); // coalesced: a few taps, not one per tick
                     }
                     yield return null;
                 }
@@ -239,6 +243,7 @@ namespace BlastScale.Client.UI.Screens
                         _coinPillLabel.text = TimeFormat.Number(_walletCoinsShown);
                         Tween.Punch(_coinPill, 0.16f, 0.3f);
                         AudioManager.Play(Sfx.CoinTick, 1.3f, 0.7f);
+                        Haptics.CoinTick();
                     });
                 }
                 else
@@ -253,6 +258,7 @@ namespace BlastScale.Client.UI.Screens
         {
             Tween.ScaleFrom(_card, 0.8f, 0.4f, Ease.OutBack);
             AudioManager.Play(Sfx.LoseSting);
+            Haptics.Notify(HapticNotification.Warning);
             yield return Tween.WaitSeconds(0.4f);
             Tween.Shake(_card, 12f, 0.45f);
         }

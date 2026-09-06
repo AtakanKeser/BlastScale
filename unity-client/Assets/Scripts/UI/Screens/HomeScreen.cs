@@ -14,8 +14,8 @@ namespace BlastScale.Client.UI.Screens
     /// <summary>
     /// Hub screen: level badge, coin/star/life counters with a regeneration countdown, the big
     /// "Play" button, cards for the daily reward, shop, leaderboard and events, and the music /
-    /// sound toggles. Data is re-fetched every time the screen appears because the server is
-    /// the source of truth.
+    /// sound / haptics toggles. Data is re-fetched every time the screen appears because the
+    /// server is the source of truth.
     /// </summary>
     public sealed class HomeScreen : UiScreen
     {
@@ -37,8 +37,10 @@ namespace BlastScale.Client.UI.Screens
         private Image _dailyGlow;
         private Button _musicButton;
         private Button _sfxButton;
+        private Button _hapticsButton;
         private Image _musicSlash;
         private Image _sfxSlash;
+        private Image _hapticsSlash;
 
         private DailyRewardStatus _daily;
         private bool _refreshingProfile;
@@ -104,6 +106,11 @@ namespace BlastScale.Client.UI.Screens
             _sfxButton = UiFactory.CreateIconButton(row, "Sound", IconFactory.SoundIcon(), OnToggleSfx, ButtonStyle.Ghost, UiTheme.IconButtonSize - 12f);
             _sfxSlash = UiFactory.CreateImage(_sfxButton.transform, "Slash", IconFactory.Slash(), UiTheme.Danger);
             UiFactory.Center(_sfxSlash.rectTransform, 60f, 60f);
+            // Haptics: the third toggle. It does nothing in the editor, but the setting is
+            // persisted like the audio ones so a phone build honours it.
+            _hapticsButton = UiFactory.CreateIconButton(row, "Haptics", IconFactory.Vibration(), OnToggleHaptics, ButtonStyle.Ghost, UiTheme.IconButtonSize - 12f);
+            _hapticsSlash = UiFactory.CreateImage(_hapticsButton.transform, "Slash", IconFactory.Slash(), UiTheme.Danger);
+            UiFactory.Center(_hapticsSlash.rectTransform, 60f, 60f);
             RefreshAudioButtons(audio);
 
             RectTransform texts = UiFactory.CreateRect(row, "Texts");
@@ -337,6 +344,7 @@ namespace BlastScale.Client.UI.Screens
             bool sfx = audio == null || audio.SfxEnabled;
             _musicSlash.gameObject.SetActive(!music);
             _sfxSlash.gameObject.SetActive(!sfx);
+            _hapticsSlash.gameObject.SetActive(!Haptics.Enabled);
         }
 
         // ------------------------------------------------------------------ actions
@@ -363,6 +371,17 @@ namespace BlastScale.Client.UI.Screens
             AudioManager.Play(Sfx.UiClick);
         }
 
+        /// <summary>Flips the haptics preference; switching it on gives one thump so the player feels the choice.</summary>
+        private void OnToggleHaptics()
+        {
+            Haptics.Enabled = !Haptics.Enabled;
+            RefreshAudioButtons(App.Audio);
+            if (Haptics.Enabled)
+            {
+                Haptics.Impact(HapticImpact.Medium);
+            }
+        }
+
         private void OnDailyReward()
         {
             if (_daily != null && !_daily.available)
@@ -381,13 +400,16 @@ namespace BlastScale.Client.UI.Screens
             if (result.Ok && result.Value != null)
             {
                 AudioManager.Play(Sfx.CoinBurst);
+                Haptics.Notify(HapticNotification.Success);
                 if (App.Fx != null)
                 {
                     App.Fx.Burst(_dailyCard.position, UiTheme.Gold, 16, 900f, 26f, 0.7f);
                     App.Fx.Sparkle(_dailyCard.position, UiTheme.Gold, 12, 80f);
                     App.Fx.FlyCoins(_dailyCard.position, _coinsPill.position, 6, () =>
                     {
-                        if (IsAlive) Tween.Punch(_coinsPill, 0.14f, 0.3f);
+                        if (!IsAlive) return;
+                        Tween.Punch(_coinsPill, 0.14f, 0.3f);
+                        Haptics.CoinTick();
                     });
                 }
                 App.Toast.Show("+" + result.Value.coins + " coins! Streak: " + result.Value.streak + " day(s)");

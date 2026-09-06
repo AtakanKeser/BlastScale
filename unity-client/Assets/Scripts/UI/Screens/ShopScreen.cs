@@ -171,6 +171,7 @@ namespace BlastScale.Client.UI.Screens
             if (result.Ok && result.Value != null)
             {
                 AudioManager.Play(Sfx.CoinBurst, 1.1f);
+                Haptics.Impact(HapticImpact.Rigid);
                 Tween.Punch(_cards[type], 0.06f, 0.4f);
                 if (App.Fx != null) App.Fx.Sparkle(_cards[type].position, UiTheme.Sky, 12, 120f);
                 App.Toast.Show("Bought " + result.Value.quantity + " x " + BoosterTypes.Label(type) + " for " + result.Value.coinsSpent + " coins");
@@ -201,6 +202,7 @@ namespace BlastScale.Client.UI.Screens
             if (result.Ok && result.Value != null)
             {
                 AudioManager.Play(Sfx.CoinBurst, 1.1f);
+                Haptics.Impact(HapticImpact.Rigid);
                 Tween.Punch(_livesCard, 0.06f, 0.4f);
                 if (App.Fx != null) App.Fx.Sparkle(_livesCard.position, UiTheme.Heart, 14, 120f);
                 App.Toast.Show("Lives refilled for " + result.Value.coinsSpent + " coins");

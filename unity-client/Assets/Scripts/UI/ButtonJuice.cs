@@ -1,4 +1,5 @@
 using BlastScale.Client.Audio;
+using BlastScale.Client.Core;
 using BlastScale.Client.UI.Fx;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -66,6 +67,8 @@ namespace BlastScale.Client.UI
         {
             if (!_enabled) return;
             _pressed = true;
+            // The finger feels the press immediately; the click sound follows on release.
+            Haptics.Selection();
             Tween.Kill(transform);
             Tween.Scale(transform, PressedScale, 0.08f, Ease.OutQuad);
         }
