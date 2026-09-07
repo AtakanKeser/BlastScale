@@ -29,6 +29,7 @@ import tools.jackson.databind.ObjectMapper;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -172,14 +173,17 @@ public class LiveEventService {
     @Transactional
     public LiveEventView create(CreateEventRequest request) {
         Instant now = Instant.now(clock);
-        Instant startAt = request.startAt() == null ? now : request.startAt();
-        if (!request.endAt().isAfter(startAt)) {
+        // Truncate to what the DATETIME(6) columns can hold: a value rounded up on the way into
+        // MySQL would make an event that starts "now" invisible until the clock passes the rounding.
+        Instant startAt = (request.startAt() == null ? now : request.startAt()).truncatedTo(ChronoUnit.MICROS);
+        Instant endAt = request.endAt().truncatedTo(ChronoUnit.MICROS);
+        if (!endAt.isAfter(startAt)) {
             throw new BlastScaleException(ErrorCode.VALIDATION_ERROR, "endAt must be after startAt");
         }
         String json = objectMapper.writeValueAsString(request.configuration() == null ? Map.of() : request.configuration());
         ruleParser.parse(request.type(), json); // fail fast on a bad configuration
         LiveEventStatus status = startAt.isAfter(now) ? LiveEventStatus.SCHEDULED : LiveEventStatus.ACTIVE;
-        LiveEvent event = events.save(new LiveEvent(request.type(), request.name(), startAt, request.endAt(), json, status, now));
+        LiveEvent event = events.save(new LiveEvent(request.type(), request.name(), startAt, endAt, json, status, now));
         evictActiveEvents();
         return toView(event, true);
     }
