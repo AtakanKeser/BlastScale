@@ -1,0 +1,25 @@
+# Line endings: scripts must stay LF even when checked out on Windows, or bash refuses to run them.
+*.sh text eol=lf
+unity-client/build-ios.sh text eol=lf
+backend/mvnw text eol=lf
+
+# Binary media: never diff or normalise these.
+*.png binary
+*.gif binary
+*.mp4 binary
+*.ogg binary
+*.sf2 binary
+*.ttf binary
+
+# Unity serialises scenes, settings and .meta files as YAML; keep them as text so diffs stay
+# readable, but tell GitHub they are generated so they do not count as hand-written code.
+unity-client/**/*.meta linguist-generated=true
+unity-client/**/*.asset linguist-generated=true
+unity-client/**/*.unity linguist-generated=true
+unity-client/Packages/packages-lock.json linguist-generated=true
+admin-panel/package-lock.json linguist-generated=true
+
+# Copies of the shared engine test vectors (the source of truth is docs/engine/).
+load-test/engine-vectors.json linguist-generated=true
+unity-client/Assets/Tests/Editor/engine-vectors.json linguist-generated=true
+backend/src/test/resources/engine-vectors.json linguist-generated=true
