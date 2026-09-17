@@ -56,6 +56,22 @@ stored preference (server URL, toggles, remembered username) when you want a cle
   `Texture2D` at startup and cached; sounds are synthesised into `AudioClip`s. The only binary assets are
   the three font files below.
 
+## Playing on a Mac without the editor
+
+`build-mac.sh` produces `build/mac/BlastScale.app`, a normal macOS app you can double-click:
+
+```bash
+./unity-client/build-mac.sh
+```
+
+`Assets/Scripts/Editor/MacBuild.cs` swaps Unity's desktop defaults (a 1920x1080 exclusive full
+screen, which would stretch the portrait layout sideways) for a resizable 450x800-point window (900x1600 Retina pixels), sets the
+name and icon, and builds with Mono. The app uses `http://localhost:8080`, so with
+`docker compose up` running in the repository root **Play as guest** works straight away; the
+offline demo needs nothing. Close the Unity editor before running the script — batch mode cannot
+open a project the editor holds. Clicks drive the board exactly like taps, and haptics are simply
+off on desktop.
+
 ## Pointing the client at a server
 
 The base URL is resolved in this order (`Assets/Scripts/Net/ClientConfig.cs`):

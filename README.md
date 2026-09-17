@@ -37,6 +37,7 @@ docker compose up --build
 |----------|---------|
 | Nothing but Unity 6 (6000.3) | open `unity-client`, press Play, tap **Offline demo** — the full game runs on this device with the same engine and levels, no server |
 | Docker | `docker compose up --build`, then **Play as guest** in the client (server URL `http://localhost:8080`) |
+| A Mac | `./unity-client/build-mac.sh` builds and opens a double-clickable `BlastScale.app` in a portrait window (close the Unity editor first) |
 | An iPhone | see [Playing on an iPhone](#playing-on-an-iphone); the build script bakes this Mac's address into the app |
 
 The login screen checks the server for you: a green pill means "connected", an amber one tells
